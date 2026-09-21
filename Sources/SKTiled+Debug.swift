@@ -29,35 +29,31 @@ import Foundation
 import SpriteKit
 
 
-/**
- 
- ## Overview
- 
- A structure representing debug drawing options for **SKTiled** objects.
- 
- ### Usage
- 
- ```swift
- // show the map's grid & bounds shape
- tilemap.debugDrawOptions = [.drawGrid, .drawBounds]
- 
- // turn off layer grid visibility
- layer.debugDrawOptions.remove(.drawGrid)
- ```
- 
- ### Properties
- 
- | Property         | Description                              |
- |:-----------------|:-----------------------------------------|
- | drawGrid         | Draw the layer's tile grid.              |
- | drawBounds       | Draw the layer's boundary.               |
- | drawGraph        | Visualize the layer's pathfinding graph. |
- | drawObjectBounds | Draw vector object bounds.               |
- | drawTileBounds   | Draw tile boundary shapes.               |
- | drawBackground   | Draw the layer's background color.       |
- | drawAnchor       | Draw the layer's anchor point.           |
- 
- */
+/// ## Overview
+///
+/// A structure representing debug drawing options for **SKTiled** objects.
+///
+/// ### Usage
+///
+/// ```swift
+/// // show the map's grid & bounds shape
+/// tilemap.debugDrawOptions = [.drawGrid, .drawBounds]
+///
+/// // turn off layer grid visibility
+/// layer.debugDrawOptions.remove(.drawGrid)
+/// ```
+///
+/// ### Properties
+///
+/// | Property         | Description                              |
+/// |:-----------------|:-----------------------------------------|
+/// | drawGrid         | Draw the layer's tile grid.              |
+/// | drawBounds       | Draw the layer's boundary.               |
+/// | drawGraph        | Visualize the layer's pathfinding graph. |
+/// | drawObjectBounds | Draw vector object bounds.               |
+/// | drawTileBounds   | Draw tile boundary shapes.               |
+/// | drawBackground   | Draw the layer's background color.       |
+/// | drawAnchor       | Draw the layer's anchor point.           |
 public struct DebugDrawOptions: OptionSet {
     public let rawValue: Int
     
@@ -85,13 +81,11 @@ public struct DebugDrawOptions: OptionSet {
 
 extension SKTilemap {
     
-    /**
-     Draw the map bounds.
-     
-     - parameter withColor: `SKColor?` optional highlight color.
-     - parameter zpos:      `CGFloat?` optional z-position of bounds shape.
-     - parameter duration:  `TimeInterval` effect length.
-     */
+    /// Draw the map bounds.
+    ///
+    /// - parameter withColor: `SKColor?` optional highlight color.
+    /// - parameter zpos:      `CGFloat?` optional z-position of bounds shape.
+    /// - parameter duration:  `TimeInterval` effect length.
     internal func drawBounds(withColor: SKColor? = nil, zpos: CGFloat? = nil, duration: TimeInterval = 0) {
         // remove old nodes
         self.childNode(withName: "MAP_BOUNDS")?.removeFromParent()

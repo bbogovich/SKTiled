@@ -143,14 +143,34 @@ internal class TileObjectProxy: SKShapeNode, SKTiledGeometry {
 
 extension TileObjectProxy {
 
-    override var description: String {
-        guard let object = reference else {
-            return "Object Proxy: nil"
+    nonisolated override var description: String {
+        MainActor.assumeIsolated {
+            guard let object = reference else {
+                return "Object Proxy: nil"
+            }
+            return "Object Proxy: \(object.id)"
         }
-        return "Object Proxy: \(object.id)"
     }
 
-    override var debugDescription: String {
-        return description
+    nonisolated override var debugDescription: String {
+        MainActor.assumeIsolated {
+            return description
+        }
+    }
+}
+
+
+extension TileObjectProxy {
+
+    /// Shows or hides object proxies and redraws them.
+    ///
+    /// - Parameters:
+    ///   - visible: show the proxies.
+    ///   - proxies: proxies to update.
+    static func setShowObjects(_ visible: Bool, for proxies: [TileObjectProxy]) {
+        for proxy in proxies {
+            proxy.showObjects = visible
+            proxy.draw()
+        }
     }
 }

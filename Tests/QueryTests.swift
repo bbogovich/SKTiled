@@ -30,6 +30,7 @@ import XCTest
 
 
 /// Test global id matching & parsing.
+@MainActor
 class QueryTests: XCTestCase {
     
     var testBundle: Bundle!
@@ -37,8 +38,8 @@ class QueryTests: XCTestCase {
     
     let tilemapName = "test-tilemap"
     
-    override func setUp() {
-        super.setUp()
+    override func setUp() async throws {
+        try await super.setUp()
         
         if (testBundle == nil) {
             TiledGlobals.default.loggingLevel = .none
@@ -51,13 +52,10 @@ class QueryTests: XCTestCase {
         
         if (tilemap == nil) {
             let mapurl = testBundle!.url(forResource: tilemapName, withExtension: "tmx")!
-            tilemap = SKTilemap.load(tmxFile: mapurl.path, loggingLevel: .none)
+            tilemap = try? SKTilemap.load(url: mapurl, loggingLevel: .none)
         }
     }
     
-    override func tearDown() {
-        super.tearDown()
-    }
     
     
     /**

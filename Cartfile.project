@@ -1,6 +1,0 @@
-SKTiled:
-  project: SKTiled.xcodeproj
-  sdks:
-  - appletvos
-  - iphoneos
-  - macosx

@@ -31,7 +31,7 @@ import SpriteKit
 /// Sprite object for visualizaing grid & graph.
 internal class SKTiledDebugDrawNode: SKNode {
 
-    private var layer: SKTiledLayerObject                     // parent layer
+    private weak var layer: SKTiledLayerObject!               // parent layer
     private var isDefault: Bool = false                       // is the tilemap default layer
 
     private var gridSprite: SKSpriteNode!
@@ -54,10 +54,6 @@ internal class SKTiledDebugDrawNode: SKNode {
         fatalError("init(coder:) has not been implemented")
     }
 
-    deinit {
-        gridTexture = nil
-        graphTexture = nil
-    }
 
     var anchorPoint: CGPoint {
         return convert(layer.position, from: layer)
@@ -65,12 +61,11 @@ internal class SKTiledDebugDrawNode: SKNode {
 
     /// Debug visualization options.
     var debugDrawOptions: DebugDrawOptions {
-        return (isDefault == true) ? layer.tilemap.debugDrawOptions : layer.debugDrawOptions
+        guard let layer = layer else { return [] }
+        return (isDefault == true) ? (layer.tilemap?.debugDrawOptions ?? []) : layer.debugDrawOptions
     }
 
-    /**
-     Align with the parent layer.
-     */
+    /// Align with the parent layer.
     func setup() {
         let nodeName = (isDefault == true) ? "MAP_DEBUG_DRAW" : "\(layer.layerName.uppercased())_DEBUG_DRAW"
         name = nodeName
@@ -90,7 +85,7 @@ internal class SKTiledDebugDrawNode: SKNode {
     }
 
     func updateZPosition() {
-        let tilemap = layer.tilemap
+        guard let tilemap = layer?.tilemap else { return }
         let zDeltaValue: CGFloat = tilemap.zDeltaForLayers
 
         // z-position values
@@ -101,51 +96,44 @@ internal class SKTiledDebugDrawNode: SKNode {
         frameShape!.zPosition = startZposition + (zDeltaValue + 20)
     }
 
-    /**
-     Update the node with the various options.
-     */
+    /// Update the node with the various options.
     func draw() {
-        DispatchQueue.main.async {
-            self.isHidden = self.debugDrawOptions.isEmpty
-            if self.debugDrawOptions.contains(.drawGrid) {
-                self.drawGrid()
-            } else {
-                self.gridSprite?.isHidden = true
-            }
-
-            if self.debugDrawOptions.contains(.drawBounds) {
-                self.drawBounds()
-            } else {
-                self.frameShape?.isHidden = true
-            }
-
-            if self.debugDrawOptions.contains(.drawGraph) {
-                self.drawGraph()
-            } else {
-                self.graphSprite?.isHidden = true
-            }
-
-            if self.debugDrawOptions.contains(.drawAnchor) {
-                self.drawLayerAnchor()
-            } else {
-                self.childNode(withName: self.anchorKey)?.removeFromParent()
-            }
-            self.updateZPosition()
+        guard layer != nil else { return }
+        isHidden = debugDrawOptions.isEmpty
+        if self.debugDrawOptions.contains(.drawGrid) {
+            self.drawGrid()
+        } else {
+            self.gridSprite?.isHidden = true
         }
+
+        if self.debugDrawOptions.contains(.drawBounds) {
+            self.drawBounds()
+        } else {
+            self.frameShape?.isHidden = true
+        }
+
+        if self.debugDrawOptions.contains(.drawGraph) {
+            self.drawGraph()
+        } else {
+            self.graphSprite?.isHidden = true
+        }
+
+        if self.debugDrawOptions.contains(.drawAnchor) {
+            self.drawLayerAnchor()
+        } else {
+            self.childNode(withName: self.anchorKey)?.removeFromParent()
+        }
+        self.updateZPosition()
     }
 
-    /**
-     Reset all visualizations.
-     */
+    /// Reset all visualizations.
     func reset() {
         gridSprite.texture = nil
         graphSprite.texture = nil
         childNode(withName: anchorKey)?.removeFromParent()
     }
 
-    /**
-     Visualize the layer's boundary shape.
-     */
+    /// Visualize the layer's boundary shape.
     func drawBounds() {
         let objectPath: CGPath!
 
@@ -156,7 +144,7 @@ internal class SKTiledDebugDrawNode: SKNode {
 
         switch layer.orientation {
             case .orthogonal:
-                objectPath = polygonPath(layer.bounds.points)
+                objectPath = polygonPath(layer.boundingRect.points)
 
             case .isometric:
                 let topPoint = CGPoint(x: 0, y: 0)
@@ -176,7 +164,7 @@ internal class SKTiledDebugDrawNode: SKNode {
                 objectPath = polygonPath(invertedPoints)
 
             case .hexagonal, .staggered:
-                objectPath = polygonPath(layer.bounds.points)
+                objectPath = polygonPath(layer.boundingRect.points)
         }
 
         if let objectPath = objectPath {
@@ -301,9 +289,7 @@ internal class SKTiledDebugDrawNode: SKNode {
         graphSprite.isHidden = false
     }
 
-    /**
-     Visualize the layer's anchor point.
-     */
+    /// Visualize the layer's anchor point.
     func drawLayerAnchor() {
         let anchor = drawAnchor(self, withKey: anchorKey)
         anchor.name = anchorKey
@@ -312,9 +298,7 @@ internal class SKTiledDebugDrawNode: SKNode {
 
     // MARK: - Memory
 
-    /**
-     Flush large textures.
-     */
+    /// Flush large textures.
     func flush() {
         gridSprite.texture = nil
         graphSprite.texture = nil
@@ -334,11 +318,15 @@ extension SKTiledDebugDrawNode: CustomReflectable {
         return Mirror(reflecting: SKTiledDebugDrawNode.self)
     }
     
-    override var description: String {
-        return "Debug Draw Node: \(layer.layerName)"
+    nonisolated override var description: String {
+        MainActor.assumeIsolated {
+            return "Debug Draw Node: \(layer.layerName)"
+        }
     }
     
-    override var debugDescription: String {
-        return description
+    nonisolated override var debugDescription: String {
+        MainActor.assumeIsolated {
+            return description
+        }
     }
 }

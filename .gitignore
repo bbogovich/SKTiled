@@ -1,10 +1,8 @@
 # all branches
-Demo/Assets/User/*
+Demo/Maps/User/*
 Docs/Exported
-Docs/html
 .swiftlint.yml
 IDETemplateMacros.plist
-SKTiled.xcodeproj/xcshareddata/xcschemes/Demo*
 bootstrap/
 *.psd
 *.html
@@ -20,3 +18,9 @@ Demo/shaders/*
 .build
 .swiftpm
 .DS_Store
+
+# MkDocs output
+site/
+
+# Xcode builds when the build location is relative to the project
+Demo/Build/

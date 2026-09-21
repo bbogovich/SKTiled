@@ -34,33 +34,31 @@ import Cocoa
 #endif
 
 
-/**
- ## Overview
- 
- Subclass of `SKTiledLayerObject`, the group layer is a container for managing groups of layers.
- 
- ## Usage ##
- 
- Query child layers:
- 
- ```swift
- for child in group.layers {
-    child.opacity = 0.5
- }
- ```
- 
- Add layers to the group with:
- 
- ```swift
- groupLayer.addLayer(playerLayer)
- ```
- 
- Remove with:
- 
- ```swift
- groupLayer.removeLayer(playerLayer)
- ```
- */
+/// ## Overview
+///
+/// Subclass of `SKTiledLayerObject`, the group layer is a container for managing groups of layers.
+///
+/// ## Usage ##
+///
+/// Query child layers:
+///
+/// ```swift
+/// for child in group.layers {
+///    child.opacity = 0.5
+/// }
+/// ```
+///
+/// Add layers to the group with:
+///
+/// ```swift
+/// groupLayer.addLayer(playerLayer)
+/// ```
+///
+/// Remove with:
+///
+/// ```swift
+/// groupLayer.removeLayer(playerLayer)
+/// ```
 public class SKGroupLayer: SKTiledLayerObject {
     
     private var _layers: Set<SKTiledLayerObject> = []
@@ -92,25 +90,21 @@ public class SKGroupLayer: SKTiledLayerObject {
     }
     
     // MARK: - Init
-    /**
-     Initialize with a layer name, and parent `SKTilemap` node.
-     
-     - parameter layerName: `String` image layer name.
-     - parameter tilemap:   `SKTilemap` parent map.
-     */
+    /// Initialize with a layer name, and parent `SKTilemap` node.
+    ///
+    /// - parameter layerName: `String` image layer name.
+    /// - parameter tilemap:   `SKTilemap` parent map.
     override public init(layerName: String, tilemap: SKTilemap) {
         super.init(layerName: layerName, tilemap: tilemap)
         self.layerType = .group
     }
     
-    /**
-     Initialize with parent `SKTilemap` and layer attributes.
-     
-     **Do not use this intializer directly**
-     
-     - parameter tilemap:      `SKTilemap` parent map.
-     - parameter attributes:   `[String: String]` layer attributes.
-     */
+    /// Initialize with parent `SKTilemap` and layer attributes.
+    ///
+    /// **Do not use this intializer directly**
+    ///
+    /// - parameter tilemap:      `SKTilemap` parent map.
+    /// - parameter attributes:   `[String: String]` layer attributes.
     public init?(tilemap: SKTilemap, attributes: [String: String]) {
         guard let layerName = attributes["name"] else { return nil }
         super.init(layerName: layerName, tilemap: tilemap, attributes: attributes)
@@ -123,31 +117,25 @@ public class SKGroupLayer: SKTiledLayerObject {
     
     // MARK: - Layers
     
-    /**
-     Returns all layers, sorted by index (first is lowest, last is highest).
-     
-     - returns: `[SKTiledLayerObject]` array of layers.
-     */
+    /// Returns all layers, sorted by index (first is lowest, last is highest).
+    ///
+    /// - returns: `[SKTiledLayerObject]` array of layers.
     public func allLayers() -> [SKTiledLayerObject] {
         return layers.sorted(by: {$0.index < $1.index})
     }
     
-    /**
-     Returns an array of layer names.
-     
-     - returns: `[String]` layer names.
-     */
+    /// Returns an array of layer names.
+    ///
+    /// - returns: `[String]` layer names.
     public func layerNames() -> [String] {
         return layers.compactMap { $0.name }
     }
     
-    /**
-     Add a layer to the layers set. Automatically sets zPosition based on the tilemap zDeltaForLayers attributes.
-     
-     - parameter layer:    `SKTiledLayerObject` layer object.
-     - parameter clamped:  `Bool` clamp position to nearest pixel.
-     - returns: `(success: Bool, layer: SKTiledLayerObject)` add was successful, layer added.
-     */
+    /// Add a layer to the layers set. Automatically sets zPosition based on the tilemap zDeltaForLayers attributes.
+    ///
+    /// - parameter layer:    `SKTiledLayerObject` layer object.
+    /// - parameter clamped:  `Bool` clamp position to nearest pixel.
+    /// - returns: `(success: Bool, layer: SKTiledLayerObject)` add was successful, layer added.
     @discardableResult
     public func addLayer(_ layer: SKTiledLayerObject, clamped: Bool = true) -> (success: Bool, layer: SKTiledLayerObject) {
         
@@ -183,23 +171,19 @@ public class SKGroupLayer: SKTiledLayerObject {
         return (success, inserted)
     }
     
-    /**
-     Remove a layer from the current layers set.
-     
-     - parameter layer: `SKTiledLayerObject` layer object.
-     - returns: `SKTiledLayerObject?` removed layer.
-     */
+    /// Remove a layer from the current layers set.
+    ///
+    /// - parameter layer: `SKTiledLayerObject` layer object.
+    /// - returns: `SKTiledLayerObject?` removed layer.
     public func removeLayer(_ layer: SKTiledLayerObject) -> SKTiledLayerObject? {
         return _layers.remove(layer)
     }
     
     // MARK: - Updating: Group Layer
     
-    /**
-     Update the group layer before each frame is rendered.
-     
-     - parameter currentTime: `TimeInterval` update interval.
-     */
+    /// Update the group layer before each frame is rendered.
+    ///
+    /// - parameter currentTime: `TimeInterval` update interval.
     override public func update(_ currentTime: TimeInterval) {
         super.update(currentTime)
     }

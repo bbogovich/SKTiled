@@ -30,6 +30,7 @@ import SpriteKit
 @testable import SKTiled
 
 
+@MainActor
 class CompressionTests: XCTestCase {
 
 

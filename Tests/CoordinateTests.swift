@@ -35,14 +35,15 @@ let keyCoordinate: Coordinate = (20,3)
 let keyLayerName = "Objects"
 
 
+@MainActor
 class CoordinateTests: XCTestCase {
     
     var testBundle: Bundle!
     var tilemap: SKTilemap?
     let tilemapName = "test-tilemap"
     
-    override func setUp() {
-        super.setUp()
+    override func setUp() async throws {
+        try await super.setUp()
         
         if (testBundle == nil) {
             TiledGlobals.default.loggingLevel = .none
@@ -55,13 +56,10 @@ class CoordinateTests: XCTestCase {
         
         if (tilemap == nil) {
             let mapurl = testBundle.url(forResource: tilemapName, withExtension: "tmx")!
-            tilemap = SKTilemap.load(tmxFile: mapurl.path, loggingLevel: .none)
+            tilemap = try? SKTilemap.load(url: mapurl, loggingLevel: .none)
         }
     }
     
-    override func tearDown() {
-        super.tearDown()
-    }
     
     /**
      Test that coordinate conversion is working as expected.

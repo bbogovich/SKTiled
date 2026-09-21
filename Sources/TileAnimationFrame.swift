@@ -27,22 +27,18 @@
 import SpriteKit
 
 
-/**
- 
- ## Overview
- 
- A structure representing a single frame of animation. Time is stored in milliseconds.
- 
- ### Properties
- 
- | Property | Description             |
- |----------|-------------------------|
- | id       | unique tile (local) id. |
- | duration | frame duration.         |
- | texture  | optional tile texture.  |
- 
- */
-public class TileAnimationFrame: NSObject {
+/// ## Overview
+///
+/// A structure representing a single frame of animation. Time is stored in milliseconds.
+///
+/// ### Properties
+///
+/// | Property | Description             |
+/// |----------|-------------------------|
+/// | id       | unique tile (local) id. |
+/// | duration | frame duration.         |
+/// | texture  | optional tile texture.  |
+public final class TileAnimationFrame {
     
     /// Frame tile id.
     public var id: Int = 0
@@ -53,15 +49,12 @@ public class TileAnimationFrame: NSObject {
     /// Frame texture.
     public var texture: SKTexture?
     
-    /**
-     Initialize with an id, frame duration and texture.
-     
-     - parameter id: `Int` tile id.
-     - parameter duration: `Int` frame duration.
-     - parameter texture: `SKTexture?` frame texture.
-     */
+    /// Initialize with an id, frame duration and texture.
+    ///
+    /// - parameter id: `Int` tile id.
+    /// - parameter duration: `Int` frame duration.
+    /// - parameter texture: `SKTexture?` frame texture.
     public init(id: Int, duration: Int, texture: SKTexture? = nil) {
-        super.init()
         self.id = id
         self.duration = duration
         self.texture = texture
@@ -72,14 +65,14 @@ public class TileAnimationFrame: NSObject {
 // MARK: - Extensions
 
 
-extension TileAnimationFrame {
-    
+extension TileAnimationFrame: CustomStringConvertible, CustomDebugStringConvertible {
+
     /// Frame description.
-    override public var description: String {
+    public var description: String {
         return "Frame: \(id): \(duration)"
     }
-    
-    override public var debugDescription: String {
+
+    public var debugDescription: String {
         return "<\(description)>"
     }
 }

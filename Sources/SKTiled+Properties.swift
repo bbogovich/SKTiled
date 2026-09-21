@@ -31,11 +31,9 @@ import SpriteKit
 extension SKTilemap {
     // MARK: - Properties
     
-    /**
-     Parse properties from the Tiled TMX file.
-
-     - parameter completion: `Void?` optional completion closure.
-    */
+    /// Parse properties from the Tiled TMX file.
+    ///
+    /// - parameter completion: `Void?` optional completion closure.
     public func parseProperties(completion: (() -> Void)?) {
 
         if (ignoreProperties == true) { return }
@@ -213,18 +211,15 @@ extension SKTileset {
 
 extension SKTiledLayerObject {
 
-    /// Parse the layer's properties value.
-    public func parseProperties(completion: (() -> Void)?) {
-
-        if (ignoreProperties == true) { return }
+    /// Applies the layer properties SKTiled understands. Called by `parseProperties(completion:)`.
+    internal func parseLayerProperties() {
         if (self.type == nil) { self.type = properties.removeValue(forKey: "type") }
 
         for (attr, value) in properties {
 
             let lattr = attr.lowercased()
 
-            if (lattr == "zposition") {
-                guard let zpos = Double(value) else { return }
+            if (lattr == "zposition"), let zpos = Double(value) {
                 zPosition = CGFloat(zpos)
             }
 
@@ -259,65 +254,36 @@ extension SKTiledLayerObject {
             if ["navigation", "navigationkey"].contains(lattr) {
                 self.navigationKey = value
             }
-
-            if completion != nil { completion!() }
         }
     }
 
-    /**
-     Returns a named property for the layer.
-
-     - parameter name: `String` property name.
-     - returns: `String?` the property value, or nil if it does not exist.
-     */
+    /// Returns a named property for the layer.
+    ///
+    /// - parameter name: `String` property name.
+    /// - returns: `String?` the property value, or nil if it does not exist.
     public func getValue(forProperty name: String) -> String? {
         return stringForKey(name)
     }
 
-    /**
-     Set a property/value pair.
-
-     - parameter name:  `String` property name.
-     - parameter value: `String` property value.
-     */
+    /// Set a property/value pair.
+    ///
+    /// - parameter name:  `String` property name.
+    /// - parameter value: `String` property value.
     public func setValue(_ value: String, forProperty name: String) {
         properties[name] = value
     }
 }
 
 
-extension SKTileLayer {
-
-    /// Parse the tile layer's properties.
-    override public func parseProperties(completion: (() -> Void)?) {
-        super.parseProperties(completion: completion)
-    }
-}
-
-
 extension SKObjectGroup {
 
-    /// Parse the object group's properties.
-    override public func parseProperties(completion: (() -> Void)?) {
-        if (ignoreProperties == true) { return }
-        for (attr, _ ) in properties {
-            let lattr = attr.lowercased()
-
-            if (lattr == "linewidth") {
-                lineWidth = (doubleForKey(attr) != nil) ? CGFloat(doubleForKey(attr)!) : lineWidth
+    /// Applies the object group properties SKTiled understands. Called by `parseProperties(completion:)`.
+    internal func parseObjectGroupProperties() {
+        for (attr, _ ) in properties where attr.lowercased() == "linewidth" {
+            if let width = doubleForKey(attr) {
+                lineWidth = CGFloat(width)
             }
         }
-
-        super.parseProperties(completion: completion)
-    }
-}
-
-
-extension SKImageLayer {
-    
-    /// Parse the image layer's properties.
-    override public func parseProperties(completion: (() -> Void)?) {
-        super.parseProperties(completion: completion)
     }
 }
 

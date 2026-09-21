@@ -29,12 +29,13 @@ import XCTest
 @testable import SKTiled
 
 
+@MainActor
 class PerformanceTests: XCTestCase {
     
     var testBundle: Bundle!
     
-    override func setUp() {
-        super.setUp()
+    override func setUp() async throws {
+        try await super.setUp()
         
 
         if (testBundle == nil) {
@@ -43,14 +44,11 @@ class PerformanceTests: XCTestCase {
         }
     }
     
-    override func tearDown() {
-        super.tearDown()
-    }
     
     func testSmallMapLoadTime() {
         self.measure {
             if let mapURL = testBundle!.url(forResource: "test-small", withExtension: "tmx") {
-                if let map = SKTilemap.load(tmxFile: mapURL.path, loggingLevel: .none) {
+                if let map = try? SKTilemap.load(url: mapURL, loggingLevel: .none) {
                     map.debugDrawOptions = [.drawGrid, .drawBounds]
                 }
             }
@@ -62,7 +60,7 @@ class PerformanceTests: XCTestCase {
     func testLargeMapLoadTime() {
         self.measure {
             if let mapURL = testBundle!.url(forResource: "test-large", withExtension: "tmx") {
-                if let map = SKTilemap.load(tmxFile: mapURL.path, loggingLevel: .none) {
+                if let map = try? SKTilemap.load(url: mapURL, loggingLevel: .none) {
                     map.debugDrawOptions = [.drawGrid, .drawBounds]
                 }
             }

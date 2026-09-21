@@ -34,6 +34,7 @@ let testHexValues = ["#2FD62A", "#FFA5A5", "#A5CCFF", "#AF722A", "#5FBFD4"]
 
 
 /// This module tests the color functions included in the framework.
+@MainActor
 class ColorTests: XCTestCase {
     
     /// Test to ensure that hex colors are parsed correctly.

@@ -29,39 +29,36 @@ import SpriteKit
 import GameplayKit
 
 
-/**
- 
- ## Overview
- 
- Custom scene type for managing `SKTilemap` nodes.
- 
- Conforms to the `SKTiledSceneDelegate`, `SKTilemapDelegate` & `SKTilesetDataSource` protocols.
- 
- [SKTiledScene Hierarchy][sktiledscene-hierarchy-img-url]
- 
- ### Properties 
- 
- | Property   | Description          |
- |:-----------|:---------------------|
- | worldNode  | Root container node. |
- | tilemap    | Tile map object.     |
- | cameraNode | Custom scene camera. |
- 
- 
- ### Instance Methods ###
- 
- | Method                 | Description                                                  |
- |:-----------------------|:-------------------------------------------------------------|
- | sceneDoubleTapped      | Called when the scene receives a double-tap event (iOS only).|
- | cameraPositionChanged  | Called when the camera positon changes.                      |
- | cameraZoomChanged      | Called when the camera zoom changes.                         |
- | cameraBoundsChanged    | Called when the camera bounds updated.                       |
- | sceneDoubleClicked     | Called when the scene is double-clicked (macOS only).        |
- | mousePositionChanged   | Called when the mouse moves in the scene (macOS only).       |
- 
- [sktiledscene-hierarchy-img-url]:https://mfessenden.github.io/SKTiled/images/scene_hierarchy.png
- */
-open class SKTiledScene: SKScene, SKPhysicsContactDelegate, SKTiledSceneDelegate, SKTilemapDelegate, SKTilesetDataSource {
+/// ## Overview
+///
+/// Custom scene type for managing `SKTilemap` nodes.
+///
+/// Conforms to the `SKTiledSceneDelegate`, `SKTilemapDelegate` & `SKTilesetDataSource` protocols.
+///
+/// [SKTiledScene Hierarchy][sktiledscene-hierarchy-img-url]
+///
+/// ### Properties
+///
+/// | Property   | Description          |
+/// |:-----------|:---------------------|
+/// | worldNode  | Root container node. |
+/// | tilemap    | Tile map object.     |
+/// | cameraNode | Custom scene camera. |
+///
+///
+/// ### Instance Methods ###
+///
+/// | Method                 | Description                                                  |
+/// |:-----------------------|:-------------------------------------------------------------|
+/// | sceneDoubleTapped      | Called when the scene receives a double-tap event (iOS only).|
+/// | cameraPositionChanged  | Called when the camera positon changes.                      |
+/// | cameraZoomChanged      | Called when the camera zoom changes.                         |
+/// | cameraBoundsChanged    | Called when the camera bounds updated.                       |
+/// | sceneDoubleClicked     | Called when the scene is double-clicked (macOS only).        |
+/// | mousePositionChanged   | Called when the mouse moves in the scene (macOS only).       |
+///
+/// [sktiledscene-hierarchy-img-url]:https://mfessenden.github.io/SKTiled/images/scene_hierarchy.png
+open class SKTiledScene: SKScene, SKPhysicsContactDelegate, SKTiledSceneDelegate, SKTilemapDelegate, SKTilesetDataSource, SKTiledSceneCameraDelegate {
     
     /// World container node.
     open var worldNode: SKNode!
@@ -99,23 +96,31 @@ open class SKTiledScene: SKScene, SKPhysicsContactDelegate, SKTiledSceneDelegate
     
     // MARK: - Init
     
-    /**
-     Initialize without a tiled map.
-     
-     - parameter size:  `CGSize` scene size.
-     - returns:         `SKTiledScene` scene.
-     */
+    /// Initialize without a tiled map.
+    ///
+    /// - parameter size:  `CGSize` scene size.
+    /// - returns:         `SKTiledScene` scene.
     required override public init(size: CGSize) {
         super.init(size: size)
+        setupWorldNode()
     }
-    
+
     /// Default initializer.
     ///
     /// - Parameter aDecoder: decoder instance.
     required public init?(coder aDecoder: NSCoder) {
         super.init(coder: aDecoder)
+        setupWorldNode()
     }
-    
+
+    /// Creates the world container node, so a map can be set up before the scene is presented.
+    private func setupWorldNode() {
+        physicsWorld.gravity = CGVector.zero
+        worldNode = SKNode()
+        worldNode.name = "World"
+        addChild(worldNode)
+    }
+
     
     /// Called when the parent view size changes.
     ///
@@ -128,112 +133,123 @@ open class SKTiledScene: SKScene, SKPhysicsContactDelegate, SKTiledSceneDelegate
     ///
     /// - Parameter view: parent view.
     override open func didMove(to view: SKView) {
-        physicsWorld.gravity = CGVector.zero
         physicsWorld.contactDelegate = self
-        
-        // setup world node
-        worldNode = SKNode()
-        worldNode.name = "World"
-        addChild(worldNode)
-        
-        // setup the camera
-        cameraNode = SKTiledSceneCamera(view: view, world: worldNode)
-        // scene should notified of camera changes
-        cameraNode.addDelegate(self)
-        addChild(cameraNode)
-        camera = cameraNode
+
+        // setup the camera once; the scene may be presented more than once
+        if cameraNode == nil {
+            cameraNode = SKTiledSceneCamera(view: view, world: worldNode)
+            // scene should notified of camera changes
+            cameraNode.addDelegate(self)
+            addChild(cameraNode)
+            camera = cameraNode
+        }
+
+        // a map set up before the scene was presented
+        if let tilemap = tilemap {
+            configureCamera(for: tilemap)
+        }
     }
     
     // MARK: - Setup
-    /**
-     Load and setup a named TMX file, with optional tilesets.
-     
-     - parameter url:              `URL` Tiled file url.
-     - parameter withTilesets:     `[SKTileset]` pre-loaded tilesets.
-     - parameter ignoreProperties: `Bool` don't parse custom properties.
-     - parameter loggingLevel:     `LoggingLevel` logging verbosity.
-     - parameter completion:       `((_ SKTilemap) -> Void)?` optional completion handler.
-     */
+
+    /// Loads a TMX file and makes it the scene's map, replacing the current one.
+    ///
+    /// - Parameters:
+    ///   - url: TMX file.
+    ///   - bundle: bundle used for file-name and asset catalog fallbacks, or `nil` for none.
+    ///   - tilesets: tilesets loaded earlier with `SKTileset.load(urls:)`.
+    ///   - ignoreProperties: don't parse custom properties.
+    ///   - loggingLevel: logging verbosity.
+    /// - Returns: the new map.
+    /// - Throws: `TiledError`; the current map is kept if loading fails.
+    @discardableResult
     open func setup(url: URL,
-                    withTilesets: [SKTileset] = [],
-                    ignoreProperties: Bool = false,
-                    loggingLevel: LoggingLevel = TiledGlobals.default.loggingLevel,
-                    _ completion: ((_ tilemap: SKTilemap) -> Void)? = nil) {
-        
-        let dirname = url.deletingLastPathComponent()
-        let filename = url.lastPathComponent
-        let relativeURL = URL(fileURLWithPath: filename, relativeTo: dirname)
-        
-        self.setup(tmxFile: relativeURL.relativePath,
-                   inDirectory: (relativeURL.baseURL == nil) ? nil : relativeURL.baseURL!.path,
-                   withTilesets: withTilesets,
-                   ignoreProperties: ignoreProperties,
-                   loggingLevel: loggingLevel,
-                   completion)
-    }
-    
-    
-    /**
-     Load and setup a named TMX file, with optional tilesets. Allows for an optional completion handler.
-     
-     - parameter tmxFile:          `String` TMX file name.
-     - parameter inDirectory:      `String?` search path for assets.
-     - parameter withTilesets:     `[SKTileset]` optional pre-loaded tilesets.
-     - parameter ignoreProperties: `Bool` don't parse custom properties.
-     - parameter loggingLevel:     `LoggingLevel` logging verbosity.
-     - parameter completion:       `((_ SKTilemap) -> Void)?` optional completion handler.
-     */
-    open func setup(tmxFile: String,
-                    inDirectory: String? = nil,
+                    bundle: Bundle? = nil,
                     withTilesets tilesets: [SKTileset] = [],
                     ignoreProperties: Bool = false,
-                    loggingLevel: LoggingLevel = TiledGlobals.default.loggingLevel,
-                    _ completion: ((_ tilemap: SKTilemap) -> Void)? = nil) {
-        
-        guard let worldNode = worldNode else {
-            self.log("cannot access world node.", level: .error)
-            return
-        }
-        
+                    loggingLevel: LoggingLevel = TiledGlobals.default.loggingLevel) throws -> SKTilemap {
+
         self.loggingLevel = loggingLevel
-        self.tilemap = nil
-        
-        if let tilemap = load(tmxFile: tmxFile,
-                              inDirectory: inDirectory,
-                              withTilesets: tilesets,
-                              ignoreProperties: ignoreProperties,
-                              loggingLevel: loggingLevel) {
-            
-            backgroundColor = tilemap.backgroundColor ?? SKColor.clear
-            
-            // add the tilemap to the world container node.
-            worldNode.addChild(tilemap, fadeIn: 0.2)
-            self.tilemap = tilemap
-            
-            // tilemap will be notified of camera changes
-            cameraNode.addDelegate(self.tilemap)
-            
-            // apply gravity from the tile map
-            physicsWorld.gravity = tilemap.gravity
-            
-            // camera properties inherited from tilemap
-            cameraNode.allowMovement = tilemap.allowMovement
-            cameraNode.allowZoom = tilemap.allowZoom
-            
-            // initial zoom level
-            if (tilemap.autoResize == true) {
-                if let view = view {
-                    cameraNode.fitToView(newSize: view.bounds.size)   /// was size
-                }
-            } else {
-                cameraNode.setCameraZoom(tilemap.worldScale)
-            }
-            
-            // run completion handler
-            completion?(tilemap)
+        let tilemap = try load(url: url,
+                               bundle: bundle,
+                               withTilesets: tilesets,
+                               ignoreProperties: ignoreProperties,
+                               loggingLevel: loggingLevel)
+        setup(tilemap: tilemap)
+        return tilemap
+    }
+
+    /// Loads a TMX file from a bundle by name and makes it the scene's map, replacing the current one.
+    ///
+    /// - Parameters:
+    ///   - name: map file name, with or without the `.tmx` extension.
+    ///   - bundle: bundle containing the map.
+    ///   - subdirectory: optional directory within the bundle's resources; the whole bundle is searched if `nil`.
+    ///   - tilesets: tilesets loaded earlier with `SKTileset.load(urls:)`.
+    ///   - ignoreProperties: don't parse custom properties.
+    ///   - loggingLevel: logging verbosity.
+    /// - Returns: the new map.
+    /// - Throws: `TiledError`; the current map is kept if loading fails.
+    @discardableResult
+    open func setup(named name: String,
+                    in bundle: Bundle = .main,
+                    subdirectory: String? = nil,
+                    withTilesets tilesets: [SKTileset] = [],
+                    ignoreProperties: Bool = false,
+                    loggingLevel: LoggingLevel = TiledGlobals.default.loggingLevel) throws -> SKTilemap {
+
+        guard let url = bundle.tiledResourceURL(named: name, extension: "tmx", subdirectory: subdirectory) else {
+            throw TiledError.resourceNotFound(name: name, bundle: bundle.bundleURL)
+        }
+        return try setup(url: url,
+                         bundle: bundle,
+                         withTilesets: tilesets,
+                         ignoreProperties: ignoreProperties,
+                         loggingLevel: loggingLevel)
+    }
+
+    /// Makes a loaded map the scene's map, replacing the current one.
+    ///
+    /// - Parameter tilemap: tile map node.
+    open func setup(tilemap: SKTilemap) {
+        if let current = self.tilemap {
+            cameraNode?.removeDelegate(current)
+            current.removeFromParent()
+        }
+
+        backgroundColor = tilemap.backgroundColor ?? SKColor.clear
+
+        // add the tilemap to the world container node.
+        worldNode.addChild(tilemap, fadeIn: 0.2)
+        self.tilemap = tilemap
+
+        // apply gravity from the tile map
+        physicsWorld.gravity = tilemap.gravity
+
+        configureCamera(for: tilemap)
+    }
+
+    /// Applies a map's camera properties; does nothing until the scene is presented and has a camera.
+    private func configureCamera(for tilemap: SKTilemap) {
+        guard let cameraNode = cameraNode else { return }
+
+        // tilemap will be notified of camera changes
+        cameraNode.removeDelegate(tilemap)
+        cameraNode.addDelegate(tilemap)
+
+        // camera properties inherited from tilemap
+        cameraNode.allowMovement = tilemap.allowMovement
+        cameraNode.allowZoom = tilemap.allowZoom
+        cameraNode.maxZoom = tilemap.zoomConstraints.max
+
+        // initial zoom level
+        if tilemap.autoResize, let view = view {
+            cameraNode.fitToView(newSize: view.bounds.size)
+        } else {
+            cameraNode.setCameraZoom(tilemap.worldScale)
         }
     }
-    
+
     // MARK: - Tilemap Delegate
     
     open func didBeginParsing(_ tilemap: SKTilemap) {
@@ -267,9 +283,37 @@ open class SKTiledScene: SKScene, SKPhysicsContactDelegate, SKTiledSceneDelegate
     open func objectForVectorType(named: String?) -> SKTileObject.Type {
         return SKTileObject.self
     }
+
+    open func objectForGraphType(named: String?) -> GKGridGraphNode.Type {
+        return SKTiledGraphNode.self
+    }
     
+    // MARK: - Camera Delegate
+
+    /// Called when the camera position changes.
+    open func cameraPositionChanged(newPosition: CGPoint) {}
+
+    /// Called when the camera zoom changes.
+    open func cameraZoomChanged(newZoom: CGFloat) {}
+
+    /// Called when the camera bounds are updated.
+    open func cameraBoundsChanged(bounds: CGRect, position: CGPoint, zoom: CGFloat) {}
+
+    #if os(macOS)
+    /// Called when the scene is double-clicked (macOS only).
+    open func sceneDoubleClicked(event: NSEvent) {}
+
+    /// Called when the mouse moves in the scene (macOS only).
+    open func mousePositionChanged(event: NSEvent) {}
+    #endif
+
+    #if os(iOS)
+    /// Called when the scene receives a double-tap event (iOS only).
+    open func sceneDoubleTapped(location: CGPoint) {}
+    #endif
+
     // MARK: - Tileset Delegate
-    
+
     open func willAddSpriteSheet(to tileset: SKTileset, fileNamed: String) -> String {
         // Called when a tileset is about to add a spritesheet image.
         return fileNamed
@@ -283,11 +327,9 @@ open class SKTiledScene: SKScene, SKPhysicsContactDelegate, SKTiledSceneDelegate
     
     // MARK: - Updating
     
-    /**
-     Called before each frame is rendered.
-     
-     - parameter currentTime: `TimeInterval` update interval.
-     */
+    /// Called before each frame is rendered.
+    ///
+    /// - parameter currentTime: `TimeInterval` update interval.
     override open func update(_ currentTime: TimeInterval) {
         // Initialize lastUpdateTime if it has not already been
         if (self.lastUpdateTime == 0) {
@@ -304,9 +346,7 @@ open class SKTiledScene: SKScene, SKPhysicsContactDelegate, SKTiledSceneDelegate
         self.tilemap?.update(currentTime)
     }
     
-    /**
-     Update the camera bounds.
-     */
+    /// Update the camera bounds.
     open func updateCamera() {
         guard (view != nil) else { return }
         
@@ -320,42 +360,30 @@ open class SKTiledScene: SKScene, SKPhysicsContactDelegate, SKTiledSceneDelegate
 
 // setup methods
 extension SKTiledSceneDelegate where Self: SKScene {
-    
-    /**
-     Load a named TMX file, with optional tilesets.
-     
-     - parameter inDirectory:      `String?` search path for assets.
-     - parameter withTilesets:     `[SKTileset]` optional pre-loaded tilesets.
-     - parameter ignoreProperties: `Bool` don't parse custom properties.
-     - parameter verbosity:        `LoggingLevel` logging verbosity.
-     - returns: `SKTilemap?` tile map node.
-     */
-    public func load(tmxFile: String,
-                     inDirectory: String? = nil,
+
+    /// Loads a TMX file with the scene as delegate and data source, when it conforms.
+    ///
+    /// - Parameters:
+    ///   - url: TMX file.
+    ///   - bundle: bundle used for file-name and asset catalog fallbacks, or `nil` for none.
+    ///   - tilesets: tilesets loaded earlier with `SKTileset.load(urls:)`.
+    ///   - ignoreProperties: don't parse custom properties.
+    ///   - loggingLevel: logging verbosity.
+    /// - Returns: tile map node, not yet added to the scene.
+    /// - Throws: `TiledError`.
+    public func load(url: URL,
+                     bundle: Bundle? = nil,
                      withTilesets tilesets: [SKTileset] = [],
                      ignoreProperties: Bool = false,
-                     loggingLevel: LoggingLevel = TiledGlobals.default.loggingLevel) -> SKTilemap? {
-        
-        
-        if let tilemap = SKTilemap.load(tmxFile: tmxFile,
-                                        inDirectory: inDirectory,
-                                        delegate: self as? SKTilemapDelegate,
-                                        tilesetDataSource: self as? SKTilesetDataSource,
-                                        withTilesets: tilesets,
-                                        ignoreProperties: ignoreProperties,
-                                        loggingLevel: loggingLevel) {
-            
-            if let cameraNode = cameraNode {
-                // camera properties inherited from tilemap
-                cameraNode.allowMovement = tilemap.allowMovement
-                cameraNode.allowZoom = tilemap.allowZoom
-                cameraNode.setCameraZoom(tilemap.worldScale)
-                cameraNode.maxZoom = tilemap.zoomConstraints.max
-            }
-            
-            return tilemap
-        }
-        return nil
+                     loggingLevel: LoggingLevel = TiledGlobals.default.loggingLevel) throws -> SKTilemap {
+
+        return try SKTilemap.load(url: url,
+                                  bundle: bundle,
+                                  delegate: self as? SKTilemapDelegate,
+                                  tilesetDataSource: self as? SKTilesetDataSource,
+                                  withTilesets: tilesets,
+                                  ignoreProperties: ignoreProperties,
+                                  loggingLevel: loggingLevel)
     }
 }
 
@@ -379,7 +407,17 @@ extension SKTiledScene {
         cameraNode.mouseMoved(with: event)
     }
     
-    override open func mouseUp(with event: NSEvent) {}
+    /// Mouse drag event handler: pans the camera.
+    ///
+    /// - Parameter event: mouse event.
+    override open func mouseDragged(with event: NSEvent) {
+        guard let cameraNode = cameraNode else { return }
+        cameraNode.scenePositionChanged(with: event)
+    }
+
+    override open func mouseUp(with event: NSEvent) {
+        cameraNode?.mouseUp(with: event)
+    }
     override open func mouseEntered(with event: NSEvent) {}
     override open func mouseExited(with event: NSEvent) {}
     
@@ -392,60 +430,6 @@ extension SKTiledScene {
     }
 }
 #endif
-
-
-// default methods
-extension SKTiledScene: SKTiledSceneCameraDelegate {
-    
-    #if os(iOS)
-    /**
-     Called when the scene receives a double-tap event (iOS only).
-     
-     - parameter location: `CGPoint` touch event location.
-     */
-    public func sceneDoubleTapped(location: CGPoint) {}
-    #endif
-    
-    // MARK: - Delegate Methods
-    /**
-     Called when the camera positon changes.
-     
-     - parameter newPositon: `CGPoint` updated camera position.
-     */
-    @objc public func cameraPositionChanged(newPosition: CGPoint) {}
-    
-    /**
-     Called when the camera zoom changes.
-     
-     - parameter newZoom: `CGFloat` camera zoom amount.
-     */
-    @objc public func cameraZoomChanged(newZoom: CGFloat) {}
-    
-    /**
-     Called when the camera bounds updated.
-     
-     - parameter bounds:  `CGRect` camera view bounds.
-     - parameter positon: `CGPoint` camera position.
-     - parameter zoom:    `CGFloat` camera zoom amount.
-     */
-    @objc public func cameraBoundsChanged(bounds: CGRect, position: CGPoint, zoom: CGFloat) {}
-    
-    #if os(macOS)
-    /**
-     Called when the scene is double-clicked (macOS only).
-     
-     - parameter event: `NSEvent` mouse click event.
-     */
-    @objc public func sceneDoubleClicked(event: NSEvent) {}
-    
-    /**
-     Called when the mouse moves in the scene (macOS only).
-     
-     - parameter event: `NSEvent` mouse click event.
-     */
-    @objc public func mousePositionChanged(event: NSEvent) {}
-    #endif
-}
 
 
 extension SKTiledScene: Loggable {}

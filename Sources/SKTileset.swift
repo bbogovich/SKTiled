@@ -29,43 +29,38 @@ import SpriteKit
 
 
 
-/**
-
- ## Overview
-
- The tileset class manages a set of `SKTilesetData` objects, which store tile data including global id, texture and animation.
-
- Tile data is accessed via a local id, and tiles can be instantiated with the resulting `SKTilesetData` instance:
-
- ```swift
- if let data = tileset.getTileData(localID: 56) {
-    let tile = SKTile(data: data)
- }
- ```
-
- ### Properties
-
- | Property              | Description                                     |
- |-----------------------|-------------------------------------------------|
- | name                  | Tileset name.                                   |
- | tilemap               | Reference to parent tilemap.                    |
- | tileSize              | Tile size (in pixels).                          |
- | columns               | Number of columns.                              |
- | tilecount             | Tile count.                                     |
- | firstGID              | First tile global id.                           |
- | lastGID               | Last tile global id.                            |
- | tileData              | Set of tile data structures.                    |
-
-
- ### Instance Methods ###
-
- | Method                | Description                                     |
- |-----------------------|-------------------------------------------------|
- | addTextures()         | Generate textures from a spritesheet image.     |
- | addTilesetTile()      | Add & return new tile data object.              |
-
-
- */
+/// ## Overview
+///
+/// The tileset class manages a set of `SKTilesetData` objects, which store tile data including global id, texture and animation.
+///
+/// Tile data is accessed via a local id, and tiles can be instantiated with the resulting `SKTilesetData` instance:
+///
+/// ```swift
+/// if let data = tileset.getTileData(localID: 56) {
+///    let tile = SKTile(data: data)
+/// }
+/// ```
+///
+/// ### Properties
+///
+/// | Property              | Description                                     |
+/// |-----------------------|-------------------------------------------------|
+/// | name                  | Tileset name.                                   |
+/// | tilemap               | Reference to parent tilemap.                    |
+/// | tileSize              | Tile size (in pixels).                          |
+/// | columns               | Number of columns.                              |
+/// | tilecount             | Tile count.                                     |
+/// | firstGID              | First tile global id.                           |
+/// | lastGID               | Last tile global id.                            |
+/// | tileData              | Set of tile data structures.                    |
+///
+///
+/// ### Instance Methods ###
+///
+/// | Method                | Description                                     |
+/// |-----------------------|-------------------------------------------------|
+/// | addTextures()         | Generate textures from a spritesheet image.     |
+/// | addTilesetTile()      | Add & return new tile data object.              |
 public class SKTileset: NSObject, SKTiledObject {
 
     /// Tileset url (external tileset).
@@ -90,7 +85,7 @@ public class SKTileset: NSObject, SKTiledObject {
     public var ignoreProperties: Bool = false
 
     /// Reference to parent tilemap.
-    public var tilemap: SKTilemap!
+    weak public var tilemap: SKTilemap!
 
     /// Tile size (in pixels).
     public var tileSize: CGSize
@@ -172,16 +167,14 @@ public class SKTileset: NSObject, SKTiledObject {
         }
     }
 
-    /**
-     Initialize with basic properties.
-
-     - parameter name:     `String` tileset name.
-     - parameter size:     `CGSize` tile size.
-     - parameter firstgid: `Int` first gid value.
-     - parameter columns:  `Int` number of columns.
-     - parameter offset:   `CGPoint` tileset offset value.
-     - returns: `SKTileset` tileset object.
-     */
+    /// Initialize with basic properties.
+    ///
+    /// - parameter name:     `String` tileset name.
+    /// - parameter size:     `CGSize` tile size.
+    /// - parameter firstgid: `Int` first gid value.
+    /// - parameter columns:  `Int` number of columns.
+    /// - parameter offset:   `CGPoint` tileset offset value.
+    /// - returns: `SKTileset` tileset object.
     public init(name: String, tileSize size: CGSize,
                 firstgid: Int = 1, columns: Int = 0,
                 offset: CGPoint = CGPoint.zero) {
@@ -195,14 +188,12 @@ public class SKTileset: NSObject, SKTiledObject {
         self.tileOffset = offset
     }
 
-    /**
-     Initialize with an external tileset (only source and first gid are given).
-
-     - parameter source:   `String` source file name.
-     - parameter firstgid: `Int` first gid value.
-     - parameter tilemap:  `SKTilemap` parent tile map node.
-     - returns: `SKTileset` tile set.
-     */
+    /// Initialize with an external tileset (only source and first gid are given).
+    ///
+    /// - parameter source:   `String` source file name.
+    /// - parameter firstgid: `Int` first gid value.
+    /// - parameter tilemap:  `SKTilemap` parent tile map node.
+    /// - parameter offset:   `CGPoint` tile drawing offset.
     public init(source: String, firstgid: Int,
                 tilemap: SKTilemap, offset: CGPoint = CGPoint.zero) {
 
@@ -222,58 +213,53 @@ public class SKTileset: NSObject, SKTiledObject {
         self.ignoreProperties = tilemap.ignoreProperties
     }
 
-    /**
-     Initialize with attributes directly from TMX file.
-
-     - parameter attributes: `[String: String]` attributes dictionary.
-     - parameter offset:     `CGPoint` pixel offset in x/y.
-     */
+    /// Initialize with attributes directly from TMX file.
+    ///
+    /// - parameter attributes: `[String: String]` attributes dictionary.
+    /// - parameter offset:     `CGPoint` pixel offset in x/y.
     public init?(attributes: [String: String],
                  offset: CGPoint = CGPoint.zero) {
 
         // name, width and height are required
         guard let setName = attributes["name"],
-            let width = attributes["tilewidth"],
-            let height = attributes["tileheight"] else {
-                return nil
+              let width = attributes["tilewidth"].flatMap({ Int($0) }),
+              let height = attributes["tileheight"].flatMap({ Int($0) }) else {
+            return nil
         }
 
         // columns is optional in older maps
-        if let columnCount = attributes["columns"] {
-            self.columns = Int(columnCount)!
+        if let columnCount = attributes["columns"].flatMap({ Int($0) }) {
+            self.columns = columnCount
         }
 
         // first gid won't be in an external tileset
-        if let firstgid = attributes["firstgid"] {
-            self.firstGID = Int(firstgid)!
+        if let firstgid = attributes["firstgid"].flatMap({ Int($0) }) {
+            self.firstGID = firstgid
         }
 
-        if let tileCount = attributes["tilecount"] {
-            self.tilecount = Int(tileCount)!
+        if let tileCount = attributes["tilecount"].flatMap({ Int($0) }) {
+            self.tilecount = tileCount
         }
 
         // optionals
-        if let spacing = attributes["spacing"] {
-            self.spacing = Int(spacing)!
+        if let spacing = attributes["spacing"].flatMap({ Int($0) }) {
+            self.spacing = spacing
         }
 
-        if let margins = attributes["margin"] {
-            self.margin = Int(margins)!
+        if let margins = attributes["margin"].flatMap({ Int($0) }) {
+            self.margin = margins
         }
 
         self.name = setName
-        self.tileSize = CGSize(width: Int(width)!, height: Int(height)!)
+        self.tileSize = CGSize(width: width, height: height)
 
         super.init()
         self.tileOffset = offset
     }
 
-    /**
-     Initialize with a TSX file name.
-
-     - parameter fileNamed:  `String` tileset file name.
-     - parameter delegate:   `SKTilemapDelegate?` optional tilemap delegate.
-     */
+    /// Initialize with a TSX file name.
+    ///
+    /// - parameter fileNamed:  `String` tileset file name.
     public init(fileNamed: String) {
         self.name = ""
         self.tileSize = CGSize.zero
@@ -281,37 +267,61 @@ public class SKTileset: NSObject, SKTiledObject {
     }
 
     // MARK: - Loading
-    /**
-     Loads Tiled tsx files and returns an array of `SKTileset` objects.
 
-     - parameter tsxFiles:          `[String]` Tiled tileset filenames.
-     - parameter delegate:          `SKTilemapDelegate?` optional [`SKTilemapDelegate`](Protocols/SKTilemapDelegate.html) instance.
-     - parameter ignoreProperties:  `Bool` ignore custom properties from Tiled.
-     - returns: `[SKTileset]` tileset objects.
-     */
-    public class func load(tsxFiles: [String],
-                           delegate: SKTilemapDelegate? = nil,
-                           ignoreProperties noparse: Bool = false) -> [SKTileset] {
+    /// Loads Tiled TSX files.
+    ///
+    /// Pass the result to `SKTilemap.load(url:withTilesets:)` to share tilesets between maps.
+    ///
+    /// - Parameters:
+    ///   - urls: TSX files.
+    ///   - bundle: bundle used for file-name and asset catalog fallbacks, or `nil` for none.
+    ///   - delegate: optional tilemap delegate.
+    ///   - tilesetDataSource: optional tileset data source.
+    ///   - ignoreProperties: ignore custom properties from Tiled.
+    ///   - loggingLevel: logging verbosity.
+    /// - Returns: tilesets, in the order of `urls`.
+    /// - Throws: `TiledError` describing the file and the problem.
+    public static func load(urls: [URL],
+                            bundle: Bundle? = nil,
+                            delegate: SKTilemapDelegate? = nil,
+                            tilesetDataSource: SKTilesetDataSource? = nil,
+                            ignoreProperties: Bool = false,
+                            loggingLevel: LoggingLevel = TiledGlobals.default.loggingLevel) throws -> [SKTileset] {
 
         let startTime = Date()
-        let queue = DispatchQueue(label: "com.sktiled.renderqueue", qos: .userInteractive)
-        let tilesets = SKTilemapParser().load(tsxFiles: tsxFiles, delegate: delegate, ignoreProperties: noparse, renderQueue: queue)
-        let renderTime = Date().timeIntervalSince(startTime)
-        let timeStamp = String(format: "%.\(String(3))f", renderTime)
+        let tilesets = try SKTilemapParser().load(tilesetURLs: urls,
+                                                  bundle: bundle,
+                                                  delegate: delegate,
+                                                  tilesetDataSource: tilesetDataSource,
+                                                  ignoreProperties: ignoreProperties,
+                                                  loggingLevel: loggingLevel)
+        let timeStamp = String(format: "%.3f", Date().timeIntervalSince(startTime))
         Logger.default.log("\(tilesets.count) tilesets rendered in: \(timeStamp)s", level: .success)
         return tilesets
     }
 
     // MARK: - Textures
 
-    /**
-     Add tile texture data from a sprite sheet image.
+    /// Adds tile textures from a sprite sheet image file.
+    ///
+    /// - Parameters:
+    ///   - url: image file (any format ImageIO can decode).
+    ///   - replace: replace the textures of existing tiles instead of adding tiles.
+    ///   - transparent: optional transparent color hex value.
+    /// - Throws: `TiledError` if the image cannot be read.
+    public func addTextures(fromSpriteSheet url: URL, replace: Bool = false, transparent: String? = nil) throws {
+        let image = try TiledImageLoader.cgImage(contentsOf: url)
+        addTextures(fromSpriteSheet: image, source: url.path, replace: replace, transparent: transparent)
+    }
 
-     - parameter source:      `String` image named referenced in the tileset.
-     - parameter replace:     `Bool` replace the current texture.
-     - parameter transparent: `String?` optional transparent color hex value.
-     */
-    public func addTextures(fromSpriteSheet source: String, replace: Bool = false, transparent: String? = nil) {
+    /// Adds tile textures from a decoded sprite sheet image.
+    ///
+    /// - Parameters:
+    ///   - image: sprite sheet image.
+    ///   - source: image path or name, recorded as the tileset's `source`.
+    ///   - replace: replace the textures of existing tiles instead of adding tiles.
+    ///   - transparent: optional transparent color hex value.
+    public func addTextures(fromSpriteSheet image: CGImage, source: String, replace: Bool = false, transparent: String? = nil) {
         let timer = Date()
 
         self.source = source
@@ -322,21 +332,10 @@ public class SKTileset: NSObject, SKTiledObject {
         }
 
         if (replace == true) {
-            let url = URL(fileURLWithPath: source)
-            self.log("replacing spritesheet with: \"\(url.lastPathComponent)\"", level: .info)
+            self.log("replacing spritesheet with: \"\(source.url.lastPathComponent)\"", level: .info)
         }
 
-        let inputURL = URL(fileURLWithPath: self.source!)
-        self.log("spritesheet: \"\(inputURL.relativePath.filename)\"", level: .debug)
-
-        // read image from file
-        guard let imageDataProvider = CGDataProvider(url: inputURL as CFURL) else {
-            self.log("Error reading image: \"\(source)\"", level: .fatal)
-            fatalError("Error reading image: \"\(source)\"")
-        }
-
-        // creare an image data provider
-        let image = CGImage(pngDataProviderSource: imageDataProvider, decode: nil, shouldInterpolate: false, intent: .defaultIntent)!
+        self.log("spritesheet: \"\(source.url.lastPathComponent)\"", level: .debug)
 
         // create the texture
         let sourceTexture = SKTexture(cgImage: image)
@@ -414,24 +413,18 @@ public class SKTileset: NSObject, SKTiledObject {
             let animatedData: [SKTilesetData] = self.tileData.filter { $0.isAnimated == true }
 
             // update animated data
-            NotificationCenter.default.post(
-                name: Notification.Name.Tileset.SpriteSheetUpdated,
-                object: self,
-                userInfo: ["animatedTiles": animatedData]
-            )
+            tilemap?.dataStorage?.tilesetSpriteSheetUpdated(self, animatedTiles: animatedData)
 
         }
     }
 
     // MARK: - Tile Data
 
-    /**
-     Add tileset tile data attributes. Returns a new `SKTilesetData` object, or nil if tile data already exists with the given id.
-
-     - parameter tileID:  `Int` local tile ID.
-     - parameter texture: `SKTexture` texture for tile at the given id.
-     - returns: `SKTilesetData?` tileset data (or nil if the data exists).
-     */
+    /// Add tileset tile data attributes. Returns a new `SKTilesetData` object, or nil if tile data already exists with the given id.
+    ///
+    /// - parameter tileID:  `Int` local tile ID.
+    /// - parameter texture: `SKTexture` texture for tile at the given id.
+    /// - returns: `SKTilesetData?` tileset data (or nil if the data exists).
     public func addTilesetTile(_ tileID: Int, texture: SKTexture) -> SKTilesetData? {
         guard !(self.tileData.contains(where: { $0.hashValue == tileID.hashValue })) else {
             log("tile data exists at id: \(tileID)", level: .error)
@@ -449,32 +442,33 @@ public class SKTileset: NSObject, SKTiledObject {
         return data
     }
 
-    /**
-     Add tileset data from an image source (tileset is a collections tileset).
+    /// Adds a tile to an image collection tileset from an image file.
+    ///
+    /// - Parameters:
+    ///   - tileID: local tile id.
+    ///   - url: image file (any format ImageIO can decode).
+    /// - Returns: new tile data, or `nil` if the id is already in use.
+    /// - Throws: `TiledError` if the image cannot be read.
+    public func addTilesetTile(_ tileID: Int, url: URL) throws -> SKTilesetData? {
+        let image = try TiledImageLoader.cgImage(contentsOf: url)
+        return addTilesetTile(tileID, image: image, source: url.path)
+    }
 
-     - parameter tileID: `Int` local tile ID.
-     - parameter source: `String` source image name.
-     - returns: `SKTilesetData?` tileset data (or nil if the data exists).
-     */
-    public func addTilesetTile(_ tileID: Int, source: String) -> SKTilesetData? {
+    /// Adds a tile to an image collection tileset from a decoded image.
+    ///
+    /// - Parameters:
+    ///   - tileID: local tile id.
+    ///   - image: tile image.
+    ///   - source: image path or name, recorded as the tile's `source`.
+    /// - Returns: new tile data, or `nil` if the id is already in use.
+    public func addTilesetTile(_ tileID: Int, image: CGImage, source: String) -> SKTilesetData? {
         guard !(self.tileData.contains(where: { $0.hashValue == tileID.hashValue })) else {
             log("tile data exists at id: \(tileID)", level: .error)
             return nil
         }
-    
+
         isImageCollection = true
 
-        // standardize the url
-        let inputURL = URL(fileURLWithPath: source).standardized
-        
-        // check to see if
-        guard let imageDataProvider = CGDataProvider(url: inputURL as CFURL) else {
-            log("invalid image source '\(inputURL.path)'.", level: .error)
-            return nil
-        }
-        
-        // create a data provider
-        let image = CGImage(pngDataProviderSource: imageDataProvider, decode: nil, shouldInterpolate: false, intent: .defaultIntent)!
         let sourceTexture = SKTexture(cgImage: image)
         sourceTexture.filteringMode = .nearest
         
@@ -490,25 +484,21 @@ public class SKTileset: NSObject, SKTiledObject {
         return data
     }
 
-    /**
-     Create new data from the given texture image path. Returns a new tileset data instance & the local id associated with it.
-
-     - parameter source: source image name.
-     - returns: local tile id & tileset data (or nil if the data exists).
-     */
+    /// Create new data from the given texture image path. Returns a new tileset data instance & the local id associated with it.
+    ///
+    /// - parameter source: source image name.
+    /// - returns: local tile id & tileset data (or nil if the data exists).
     public func addTilesetTile(source: String) -> (id: UInt32, data: SKTilesetData)? {
         let nextTileId = tilecount + 1
         let nextData = SKTilesetData(id: nextTileId, texture: SKTexture(imageNamed: source), tileSet: self)
         return (UInt32(nextTileId), nextData)
     }
 
-    /**
-     Set(replace) the texture for a given tile id.
-
-     - parameter tileID:  `Int` tile ID.
-     - parameter texture: `SKTexture` texture for tile at the given id.
-     - returns: `SKTexture?` previous tile data texture.
-     */
+    /// Set(replace) the texture for a given tile id.
+    ///
+    /// - parameter id:      `Int` local tile id.
+    /// - parameter texture: `SKTexture` texture for tile at the given id.
+    /// - returns: `SKTexture?` previous tile data texture.
     @discardableResult
     public func setDataTexture(_ id: Int, texture: SKTexture) -> SKTexture? {
         guard let data = getTileData(localID: id) else {
@@ -519,70 +509,51 @@ public class SKTileset: NSObject, SKTiledObject {
         }
 
         let current = data.texture.copy() as? SKTexture
-        let userInfo: [String: Any] = (current != nil) ? ["old": current!] : [:]
 
         texture.filteringMode = .nearest
         data.texture = texture
 
-        // update observers
-        NotificationCenter.default.post(
-            name: Notification.Name.TileData.TextureChanged,
-            object: data,
-            userInfo: userInfo
-        )
+        // update the tiles using this data
+        tilemap?.dataStorage?.tileDataTextureChanged(data)
 
         return current
     }
 
-    /**
-     Set(replace) the texture for a given tile id.
-
-     - parameter tileID:     `Int` tile ID.
-     - parameter imageNamed: `String` source texture name.
-     - returns: `SKTexture?` old tile data texture.
-     */
+    /// Replaces the texture for a tile with an image file.
+    ///
+    /// - Parameters:
+    ///   - id: local tile id.
+    ///   - url: image file (any format ImageIO can decode).
+    /// - Returns: previous texture.
+    /// - Throws: `TiledError` if the image cannot be read.
     @discardableResult
-    public func setDataTexture(_ id: Int, imageNamed: String) -> SKTexture? {
-        let inputURL = URL(fileURLWithPath: imageNamed)
-        // read image from file
-        guard let imageDataProvider = CGDataProvider(url: inputURL as CFURL) else {
-            return nil
-        }
-
-        // creare an image data provider
-        let image = CGImage(pngDataProviderSource: imageDataProvider, decode: nil, shouldInterpolate: false, intent: .defaultIntent)!
-        let texture = SKTexture(cgImage: image)
-        return setDataTexture(id, texture: texture)
+    public func setDataTexture(_ id: Int, url: URL) throws -> SKTexture? {
+        let image = try TiledImageLoader.cgImage(contentsOf: url)
+        return setDataTexture(id, texture: TiledImageLoader.texture(from: image))
     }
 
-    /**
-     Returns true if the tileset contains the given ID (local).
-
-     - parameter localID:  `UInt32` local tile id.
-     - returns: `Bool` tileset contains the local id.
-     */
+    /// Returns true if the tileset contains the given ID (local).
+    ///
+    /// - parameter localID:  `UInt32` local tile id.
+    /// - returns: `Bool` tileset contains the local id.
     internal func contains(localID: UInt32) -> Bool {
         return localRange ~= Int(localID)
     }
 
-    /**
-     Returns true if the tileset contains the global ID.
-
-     - parameter globalID:  `UInt32` global tile id.
-     - returns: `Bool` tileset contains the global id.
-     */
+    /// Returns true if the tileset contains the global ID.
+    ///
+    /// - parameter gid:  `UInt32` global tile id.
+    /// - returns: `Bool` tileset contains the global id.
     public func contains(globalID gid: UInt32) -> Bool {
         return globalRange ~= Int(gid)
     }
 
-    /**
-     Returns tile data for the given global tile ID.
-
-     ** Tiled ID == GID + 1
-
-     - parameter globalID: `Int` global tile id.
-     - returns: `SKTilesetData?` tile data object.
-     */
+    /// Returns tile data for the given global tile ID.
+    ///
+    /// ** Tiled ID == GID + 1
+    ///
+    /// - parameter gid: `Int` global tile id.
+    /// - returns: `SKTilesetData?` tile data object.
     public func getTileData(globalID gid: Int) -> SKTilesetData? {
         // parse out flipped flags
         var id = rawTileID(id: gid)
@@ -593,12 +564,10 @@ public class SKTileset: NSObject, SKTiledObject {
         return nil
     }
 
-    /**
-     Returns tile data for the given local tile ID.
-
-     - parameter localID: `Int` local tile id.
-     - returns: `SKTilesetData?` tile data object.
-     */
+    /// Returns tile data for the given local tile ID.
+    ///
+    /// - parameter id: `Int` local tile id.
+    /// - returns: `SKTilesetData?` tile data object.
     public func getTileData(localID id: Int) -> SKTilesetData? {
         let localID = rawTileID(id: id)
         if let index = tileData.firstIndex(where: { $0.id == localID }) {
@@ -607,46 +576,38 @@ public class SKTileset: NSObject, SKTiledObject {
         return nil
     }
 
-    /**
-     Returns tile data with the given property.
-
-     - parameter withProperty: `String` property name.
-     - returns: `[SKTilesetData]` array of tile data.
-     */
+    /// Returns tile data with the given property.
+    ///
+    /// - parameter property: `String` property name.
+    /// - returns: `[SKTilesetData]` array of tile data.
     public func getTileData(withProperty property: String) -> [SKTilesetData] {
         return tileData.filter { $0.properties[property] != nil }
     }
 
-    /**
-     Returns tile data with the given name & animated state.
-
-     - parameter named:      `String` data name.
-     - parameter isAnimated: `Bool` filter data that is animated.
-     - returns: `[SKTilesetData]` array of tile data.
-     */
+    /// Returns tile data with the given name & animated state.
+    ///
+    /// - parameter name:      `String` data name.
+    /// - parameter isAnimated: `Bool` filter data that is animated.
+    /// - returns: `[SKTilesetData]` array of tile data.
     public func getTileData(named name: String, isAnimated: Bool = false) -> [SKTilesetData] {
         return tileData.filter {
             ($0.name == name) && ($0.isAnimated == isAnimated)
         }
     }
 
-    /**
-     Returns tile data with the given type.
-
-     - parameter ofType: `String` data type.
-     - returns: `[SKTilesetData]` array of tile data.
-     */
+    /// Returns tile data with the given type.
+    ///
+    /// - parameter ofType: `String` data type.
+    /// - returns: `[SKTilesetData]` array of tile data.
     public func getTileData(ofType: String) -> [SKTilesetData] {
         return tileData.filter { $0.type == ofType }
     }
 
-    /**
-     Returns tile data with the given property.
-
-     - parameter property: `String` property name.
-     - parameter value:    `AnyObject` value
-     - returns: `[SKTilesetData]` array of tile data.
-     */
+    /// Returns tile data with the given property.
+    ///
+    /// - parameter property: `String` property name.
+    /// - parameter value:    `AnyObject` value
+    /// - returns: `[SKTilesetData]` array of tile data.
     public func getTileData(withProperty property: String, _ value: Any) -> [SKTilesetData] {
         var result: [SKTilesetData] = []
         let tiledata = getTileData(withProperty: property)
@@ -658,21 +619,17 @@ public class SKTileset: NSObject, SKTiledObject {
         return result
     }
 
-    /**
-     Returns animated tile data.
-
-     - returns: `[SKTilesetData]` array of animated tile data.
-     */
+    /// Returns animated tile data.
+    ///
+    /// - returns: `[SKTilesetData]` array of animated tile data.
     public func getAnimatedTileData() -> [SKTilesetData] {
         return tileData.filter { $0.isAnimated == true }
     }
 
-    /**
-     Convert a global ID to the tileset's local ID.
-
-     - parameter gid: `Int` global id.
-     - returns: `Int`  local tile ID.
-     */
+    /// Convert a global ID to the tileset's local ID.
+    ///
+    /// - parameter gid: `Int` global id.
+    /// - returns: `Int`  local tile ID.
     public func getLocalID(forGlobalID gid: Int) -> Int {
         // firstGID is greater than 0 only when added to a tilemap
         let id = (firstGID > 0) ? (gid - firstGID) : gid
@@ -680,23 +637,19 @@ public class SKTileset: NSObject, SKTiledObject {
         return (id < 0) ? gid : id
     }
 
-    /**
-     Convert a global ID to the tileset's local ID.
-
-     - parameter id: `Int` local id.
-     - returns: `Int` global tile ID.
-     */
+    /// Convert a global ID to the tileset's local ID.
+    ///
+    /// - parameter id: `Int` local id.
+    /// - returns: `Int` global tile ID.
     public func getGlobalID(forLocalID id: Int) -> Int {
         let gid = (firstGID > 0) ? (firstGID + id) - 1 : id
         return gid
     }
 
-    /**
-     Check for tile ID flip flags.
-
-     - parameter id: `Int` tile ID.
-     - returns: `Int` translated ID.
-     */
+    /// Check for tile ID flip flags.
+    ///
+    /// - parameter id: `Int` tile ID.
+    /// - returns: `Int` translated ID.
     internal func rawTileID(id: Int) -> Int {
         let uid: UInt32 = UInt32(id)
         // masks for tile flipping
@@ -715,9 +668,7 @@ public class SKTileset: NSObject, SKTiledObject {
 
     // MARK: - Rendering
 
-    /**
-     Refresh textures for animated tile data.
-     */
+    /// Refresh textures for animated tile data.
     internal func setupAnimatedTileData() {
         let animatedData = getAnimatedTileData()
         var framesAdded = 0
@@ -752,18 +703,22 @@ public func == (lhs: SKTileset, rhs: SKTileset) -> Bool {
 
 extension SKTileset {
 
-    override public var hash: Int {
-        return name.hashValue
+    nonisolated override public var hash: Int {
+        MainActor.assumeIsolated {
+            return name.hashValue
+        }
     }
 
     /// String representation of the tileset object.
-    override public var description: String {
-        var desc = "Tileset: \"\(name)\" @ \(tileSize), firstgid: \(firstGID), \(dataCount) tiles"
-        if tileOffset.x != 0 || tileOffset.y != 0 {
-            desc += ", offset: \(tileOffset.x)x\(tileOffset.y)"
+    nonisolated override public var description: String {
+        MainActor.assumeIsolated {
+            var desc = "Tileset: \"\(name)\" @ \(tileSize), firstgid: \(firstGID), \(dataCount) tiles"
+            if tileOffset.x != 0 || tileOffset.y != 0 {
+                desc += ", offset: \(tileOffset.x)x\(tileOffset.y)"
+            }
+            return desc
         }
-        return desc
     }
 
-    override public var debugDescription: String { return description }
+    nonisolated override public var debugDescription: String { MainActor.assumeIsolated { return description } }
 }

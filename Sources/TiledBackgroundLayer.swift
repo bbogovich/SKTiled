@@ -26,9 +26,7 @@
 
 import SpriteKit
 
-/**
- The `BackgroundLayer` object represents the default background for a tilemap.
- */
+/// The `BackgroundLayer` object represents the default background for a tilemap.
 internal class BackgroundLayer: SKTiledLayerObject {
 
     private var sprite: SKSpriteNode!
@@ -50,11 +48,9 @@ internal class BackgroundLayer: SKTiledLayerObject {
 
     // MARK: - Init
     
-    /**
-     Initialize with the parent `SKTilemap` node.
-
-     - parameter tilemap:   `SKTilemap` parent map.
-     */
+    /// Initialize with the parent `SKTilemap` node.
+    ///
+    /// - parameter tilemap:   `SKTilemap` parent map.
     public init(tilemap: SKTilemap) {
         super.init(layerName: "DEFAULT", tilemap: tilemap)
         layerType = .none
@@ -67,11 +63,9 @@ internal class BackgroundLayer: SKTiledLayerObject {
         sprite!.position.y -= tilemap.sizeInPoints.height / 2
     }
 
-    /**
-     Set the color of the background node.
-
-     - parameter tilemap:   `SKTilemap` parent map.
-     */
+    /// Set the color of the background node.
+    ///
+    /// - parameter tilemap:   `SKTilemap` parent map.
     public func setBackground(color: SKColor) {
         self.sprite?.color = color
     }
@@ -82,11 +76,9 @@ internal class BackgroundLayer: SKTiledLayerObject {
 
     // MARK: - Updating: Background Layer
 
-    /**
-     Update the background layer before each frame is rendered.
-
-     - parameter currentTime: `TimeInterval` update interval.
-     */
+    /// Update the background layer before each frame is rendered.
+    ///
+    /// - parameter currentTime: `TimeInterval` update interval.
     override public func update(_ currentTime: TimeInterval) {
         super.update(currentTime)
     }

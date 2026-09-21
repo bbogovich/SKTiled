@@ -33,21 +33,17 @@ import Cocoa
 #endif
 
 
-/**
- 
- ## Overview
- 
- Camera zoom rounding factor. Clamps the zoom value to the nearest whole pixel value in order to alleviate cracks appearing in between individual tiles.
- 
- ### Properties 
- 
- | Property | Description                                 |
- |----------|---------------------------------------------|
- | none     | Do not clamp camera zoom.                   |
- | half     | Clamp zoom to the nearest half-pixel.       |
- | third    | Clamp zoom to the nearest third of a pixel. |
- 
- */
+/// ## Overview
+///
+/// Camera zoom rounding factor. Clamps the zoom value to the nearest whole pixel value in order to alleviate cracks appearing in between individual tiles.
+///
+/// ### Properties
+///
+/// | Property | Description                                 |
+/// |----------|---------------------------------------------|
+/// | none     | Do not clamp camera zoom.                   |
+/// | half     | Clamp zoom to the nearest half-pixel.       |
+/// | third    | Clamp zoom to the nearest third of a pixel. |
 public enum CameraZoomClamping: CGFloat {
     case none    = 0
     case half    = 2
@@ -57,21 +53,17 @@ public enum CameraZoomClamping: CGFloat {
 }
 
 
-/**
- 
- ## Overview
- 
- Determines how an attached controller interacts with the camera.
- 
- ### Properties 
- 
- | Property | Description                                 |
- |----------|---------------------------------------------|
- | none     | Controller does not affect camera.          |
- | dolly    | Controller pans the camera.                 |
- | zoom     | Controller changes the camera zoom.         |
- 
- */
+/// ## Overview
+///
+/// Determines how an attached controller interacts with the camera.
+///
+/// ### Properties
+///
+/// | Property | Description                                 |
+/// |----------|---------------------------------------------|
+/// | none     | Controller does not affect camera.          |
+/// | dolly    | Controller pans the camera.                 |
+/// | zoom     | Controller changes the camera zoom.         |
 public enum CameraControlMode: Int {
     case none
     case dolly
@@ -79,38 +71,40 @@ public enum CameraControlMode: Int {
 }
 
 
-/**
- ## Overview
- 
- Custom scene camera that responds to finger gestures and mouse events.
- 
- The `SKTiledSceneCamera` is a custom camera meant to be used with a scene conforming to the `SKTiledSceneDelegate` protocol.
- The camera defines a position in the scene to render the scene from, with a reference to the `SKTiledSceneDelegate.worldNode`
- to interact with tile maps.
- 
- ### Properties 
- 
- | Property      | Description                                                       |
- |---------------|-------------------------------------------------------------------|
- | world         | World container node.                                             |
- | delegates     | Array of delegates to notify about camera updates.                |
- | zoom          | Camera zoom value.                                                |
- | allowMovement | Toggle to allow camera movement.                                  |
- | minZoom       | Minimum zoom value.                                               |
- | maxZoom       | Maximum zoom value.                                               |
- | zoomClamping  | Clamping factor used to alleviate render artifacts like cracking. |
- 
- */
+/// ## Overview
+///
+/// Custom scene camera that responds to finger gestures and mouse events.
+///
+/// The `SKTiledSceneCamera` is a custom camera meant to be used with a scene conforming to the `SKTiledSceneDelegate` protocol.
+/// The camera defines a position in the scene to render the scene from, with a reference to the `SKTiledSceneDelegate.worldNode`
+/// to interact with tile maps.
+///
+/// ### Properties
+///
+/// | Property      | Description                                                       |
+/// |---------------|-------------------------------------------------------------------|
+/// | world         | World container node.                                             |
+/// | delegates     | Array of delegates to notify about camera updates.                |
+/// | zoom          | Camera zoom value.                                                |
+/// | allowMovement | Toggle to allow camera movement.                                  |
+/// | minZoom       | Minimum zoom value.                                               |
+/// | maxZoom       | Maximum zoom value.                                               |
+/// | zoomClamping  | Clamping factor used to alleviate render artifacts like cracking. |
 public class SKTiledSceneCamera: SKCameraNode {
     
     /// World container node.
     unowned let world: SKNode
     
     /// Camera bounds.
-    internal var bounds: CGRect
+    internal var viewBounds: CGRect
     
     /// Camera observers.
-    internal var delegates: [SKTiledSceneCameraDelegate] = []
+    internal var delegates: [SKTiledSceneCameraDelegate] {
+        return delegateReferences.compactMap { $0.delegate }
+    }
+
+    /// Delegates are held weakly: the scene and the map both own the camera's lifetime.
+    private var delegateReferences: [WeakCameraDelegate] = []
     
     /// Camera zoom level.
     public var zoom: CGFloat = 1.0
@@ -229,15 +223,13 @@ public class SKTiledSceneCamera: SKCameraNode {
     }
     
     // MARK: - Init
-    /**
-     Initialize the camera with SKView and world node reference.
-     
-     - parameter view:     `SKView?` optional view.
-     - parameter world:    `SKNode` world container node.
-     */
+    /// Initialize the camera with SKView and world node reference.
+    ///
+    /// - parameter view:     `SKView?` optional view.
+    /// - parameter node:    `SKNode` world container node.
     public init(view: SKView, world node: SKNode) {
         world = node
-        bounds = view.bounds
+        viewBounds = view.bounds
         super.init()
         
         // add the overlay
@@ -257,19 +249,13 @@ public class SKTiledSceneCamera: SKCameraNode {
         fatalError("init(coder:) has not been implemented")
     }
     
-    deinit {
-        // remove delegates
-        delegates.removeAll()
-    }
-    
+
     #if os(iOS)
     // MARK: - Gestures
     
-    /**
-     Setup gesture recognizers for navigating the scene.
-     
-     - parameter skView: `SKView` current SpriteKit view.
-     */
+    /// Setup gesture recognizers for navigating the scene.
+    ///
+    /// - parameter skView: `SKView` current SpriteKit view.
     public func setupGestures(for skView: SKView) {
         // setup pan recognizer
         cameraPanned = UIPanGestureRecognizer(target: self, action: #selector(cameraPanned(_:)))
@@ -292,57 +278,44 @@ public class SKTiledSceneCamera: SKCameraNode {
     
     // MARK: - Delegates
     
-    /**
-     Enable/disable camera callbacks for all delegates.
-     
-     - parameter value: `Bool` enable delegate callbacks.
-     */
+    /// Enable/disable camera callbacks for all delegates.
+    ///
+    /// - parameter value: `Bool` enable delegate callbacks.
     public func enableDelegateCallbacks(_ value: Bool) {
         for delegate in self.delegates {
             delegate.receiveCameraUpdates = value
         }
     }
     
-    /**
-     Add a camera delegate to allow it to be notified of camera changes.
-     
-     - parameter delegate:  `SKTiledSceneCameraDelegate` camera delegate.
-     */
+    /// Add a camera delegate to allow it to be notified of camera changes.
+    ///
+    /// - parameter delegate:  `SKTiledSceneCameraDelegate` camera delegate.
     public func addDelegate(_ delegate: SKTiledSceneCameraDelegate) {
-        if (delegates.firstIndex(where: { $0 === delegate }) != nil) {
+        delegateReferences.removeAll { $0.delegate == nil }
+        guard delegateReferences.contains(where: { $0.delegate === delegate }) == false else {
             return
         }
-        delegates.append(delegate)
+        delegateReferences.append(WeakCameraDelegate(delegate: delegate))
     }
     
-    /**
-     Disconnect a camera delegate.
-     
-     - parameter delegate:  `SKTiledSceneCameraDelegate` camera delegate.
-     */
+    /// Disconnect a camera delegate.
+    ///
+    /// - parameter delegate:  `SKTiledSceneCameraDelegate` camera delegate.
     public func removeDelegate(_ delegate: SKTiledSceneCameraDelegate) {
-        if let idx = delegates.firstIndex(where: { $0 === delegate}) {
-            delegates.remove(at: idx)
-        }
+        delegateReferences.removeAll { $0.delegate == nil || $0.delegate === delegate }
     }
     
-    /**
-     Update delegates with the contained nodes array.
-     */
+    /// Update delegates with the contained nodes array.
     internal func updateContainedNodes() {
         for delegate in self.delegates {
             guard (delegate.receiveCameraUpdates == true) && (notifyDelegatesOnContainedNodesChange == true) else { continue }
             
-            DispatchQueue.main.async {
-                delegate.containedNodesChanged?(self.containedNodeSet())
-            }
+            delegate.containedNodesChanged(containedNodeSet())
         }
     }
     
     // MARK: - Overlay
-    /**
-     Add an overlay node.
-     */
+    /// Add an overlay node.
     public func addToOverlay(_ node: SKNode) {
         overlay.addChild(node)
         node.zPosition = zPosition + 10
@@ -350,11 +323,10 @@ public class SKTiledSceneCamera: SKCameraNode {
     
     // MARK: - Zooming
     
-    /**
-     Apply zooming to the world node (as scale).
-     
-     - parameter scale: `CGFloat` zoom amount.
-     */
+    /// Apply zooming to the world node (as scale).
+    ///
+    /// - parameter scale: `CGFloat` zoom amount.
+    /// - parameter interval: `TimeInterval` animation duration; 0 zooms immediately.
     public func setCameraZoom(_ scale: CGFloat, interval: TimeInterval = 0) {
         
         // clamp scaling between min/max zoom
@@ -379,42 +351,36 @@ public class SKTiledSceneCamera: SKCameraNode {
         
         // notify delegates
         for delegate in delegates {
-            delegate.cameraZoomChanged?(newZoom: zoomClamped)
+            delegate.cameraZoomChanged(newZoom: zoomClamped)
         }
         
         self.updateContainedNodes()
     }
     
-    /**
-     Apply zooming to the camera based on location.
-     
-     - parameter scale:    `CGFloat` zoom amount.
-     - parameter location: `CGPoint` zoom location.
-     */
+    /// Apply zooming to the camera based on location.
+    ///
+    /// - parameter scale:    `CGFloat` zoom amount.
+    /// - parameter location: `CGPoint` zoom location.
     public func setCameraZoomAtLocation(scale: CGFloat, location: CGPoint) {
         setCameraZoom(scale)
         moveCamera(location: location, previous: position)
     }
     
-    /**
-     Set the camera min/max zoom values.
-     
-     - parameter minimum:    `CGFloat` minimum zoom vector.
-     - parameter maximum:    `CGFloat` maximum zoom vector.
-     */
+    /// Set the camera min/max zoom values.
+    ///
+    /// - parameter minimum:    `CGFloat` minimum zoom vector.
+    /// - parameter maximum:    `CGFloat` maximum zoom vector.
     public func setZoomConstraints(minimum: CGFloat, maximum: CGFloat) {
         let minValue = minimum > 0 ? minimum : 0
         minZoom = minValue
         maxZoom = maximum
     }
     
-    /**
-     Clamp the camera scale to alleviate cracking. Default clamps float value to the nearest 0.25.
-     
-     - parameter value:   `CGFloat` zoom value.
-     - parameter factor:  `CGFloat` scale factor.
-     - returns: `CGFloat` clamped zoom value.
-     */
+    /// Clamp the camera scale to alleviate cracking. Default clamps float value to the nearest 0.25.
+    ///
+    /// - parameter value:   `CGFloat` zoom value.
+    /// - parameter factor:  `CGFloat` scale factor.
+    /// - returns: `CGFloat` clamped zoom value.
     internal func clampZoomValue(_ value: CGFloat, factor: CGFloat = 0) -> CGFloat {
         guard factor != 0 else { return value }
         let result = round(value * factor) / factor
@@ -422,29 +388,25 @@ public class SKTiledSceneCamera: SKCameraNode {
     }
     
     // MARK: - Bounds
-    /**
-     Update the camera bounds.
-     
-     - parameter bounds: `CGRect` camera view bounds.
-     */
+    /// Update the camera bounds.
+    ///
+    /// - parameter bounds: `CGRect` camera view bounds.
     public func setCameraBounds(bounds: CGRect) {
-        self.bounds = bounds
+        self.viewBounds = bounds
         
         // notify delegates
         for delegate in delegates {
-            delegate.cameraBoundsChanged?(bounds: bounds, position: position, zoom: zoom)
+            delegate.cameraBoundsChanged(bounds: bounds, position: position, zoom: zoom)
         }
         self.updateContainedNodes()
     }
     
     // MARK: - Movement
     
-    /**
-     Move the camera to the given location.
-     
-     - parameter location:  `CGPoint` new location.
-     - parameter previous:  `CGPoint` old location.
-     */
+    /// Move the camera to the given location.
+    ///
+    /// - parameter location:  `CGPoint` new location.
+    /// - parameter previous:  `CGPoint` old location.
     public func moveCamera(location: CGPoint, previous: CGPoint) {
         let dy = position.y - (location.y - previous.y)
         let dx = position.x - (location.x - previous.x)
@@ -453,41 +415,37 @@ public class SKTiledSceneCamera: SKCameraNode {
         
         // notify delegates
         for delegate in delegates {
-            delegate.cameraPositionChanged?(newPosition: position)
+            delegate.cameraPositionChanged(newPosition: position)
         }
         self.updateContainedNodes()
     }
     
-    /**
-     Move camera manually.
-     
-     - parameter point:    `CGPoint` point to move to.
-     - parameter duration: `TimeInterval` duration of move.
-     */
+    /// Move camera manually.
+    ///
+    /// - parameter point:    `CGPoint` point to move to.
+    /// - parameter duration: `TimeInterval` duration of move.
     public func panToPoint(_ point: CGPoint, duration: TimeInterval = 0.3) {
         run(SKAction.move(to: point, duration: duration), completion: {
             // notify delegates
             for delegate in self.delegates {
                 guard (delegate.receiveCameraUpdates == true) else { continue }
-                delegate.cameraPositionChanged?(newPosition: point)
+                delegate.cameraPositionChanged(newPosition: point)
             }
             self.updateContainedNodes()
         })
     }
     
-    /**
-     Center the camera on a location in the scene.
-     
-     - parameter scenePoint: `CGPoint` point in scene.
-     - parameter easeInOut:  `TimeInterval` ease in/out speed.
-     */
+    /// Center the camera on a location in the scene.
+    ///
+    /// - parameter point: `CGPoint` point in scene.
+    /// - parameter duration: `TimeInterval` animation duration; 0 moves immediately.
     public func centerOn(scenePoint point: CGPoint, duration: TimeInterval = 0) {
         
         defer {
             // notify delegates
             for delegate in self.delegates {
                 guard (delegate.receiveCameraUpdates == true) else { continue }
-                delegate.cameraPositionChanged?(newPosition: point)
+                delegate.cameraPositionChanged(newPosition: point)
             }
             self.updateContainedNodes()
         }
@@ -501,12 +459,8 @@ public class SKTiledSceneCamera: SKCameraNode {
         }
     }
     
-    /**
-     Center the camera on a node in the scene.
-     
-     - parameter scenePoint: `SKNode` node in scene.
-     - parameter easeInOut:  `TimeInterval` ease in/out speed.
-     */
+    /// Center the camera on a node in the scene.
+    ///
     public func centerOn(_ node: SKNode, duration: TimeInterval = 0) {
         guard let scene = self.scene else { return }
         let nodePosition = scene.convert(node.position, from: node)
@@ -515,7 +469,7 @@ public class SKTiledSceneCamera: SKCameraNode {
             // notify delegates
             for delegate in self.delegates {
                 guard (delegate.receiveCameraUpdates == true) else { continue }
-                delegate.cameraPositionChanged?(newPosition: nodePosition)
+                delegate.cameraPositionChanged(newPosition: nodePosition)
             }
             self.updateContainedNodes()
         }
@@ -529,30 +483,25 @@ public class SKTiledSceneCamera: SKCameraNode {
         }
     }
     
-    /**
-     Reset the camera position & zoom level.
-     */
+    /// Reset the camera position & zoom level.
     public func resetCamera() {
         centerOn(scenePoint: CGPoint(x: 0, y: 0))
         setCameraZoom(initialZoom)
     }
     
-    /**
-     Reset the camera position & zoom level.
-     
-     - parameter toScale: `CGFloat` camera scale.
-     */
+    /// Reset the camera position & zoom level.
+    ///
+    /// - parameter scale: `CGFloat` camera scale.
     public func resetCamera(toScale scale: CGFloat) {
         centerOn(scenePoint: CGPoint(x: 0, y: 0))
         setCameraZoom(scale)
     }
     
-    /**
-     Center & fit the current tilemap in the frame when the parent scene is resized.
-     
-     - parameter newSize:    `CGSize` updated scene size.
-     - parameter transition: `TimeInterval` transition time.
-     */
+    /// Center & fit the current tilemap in the frame when the parent scene is resized.
+    ///
+    /// - parameter newSize:    `CGSize` updated scene size.
+    /// - parameter transition: `TimeInterval` transition time.
+    /// - parameter verbose: `Bool` log the computed zoom.
     public func fitToView(newSize: CGSize, transition: TimeInterval = 0, verbose: Bool = false) {
         
         guard let scene = scene,
@@ -593,13 +542,11 @@ public class SKTiledSceneCamera: SKCameraNode {
     
     // MARK: - Geometry
     
-    /**
-     Returns the points of the camera's bounding shape.
-     
-     - returns: `[CGPoint]` array of points.
-     */
+    /// Returns the points of the camera's bounding shape.
+    ///
+    /// - returns: `[CGPoint]` array of points.
     public func getVertices() -> [CGPoint] {
-        return self.bounds.points
+        return self.viewBounds.points
     }
 }
 
@@ -617,20 +564,16 @@ extension CameraZoomClamping {
         }
     }
     
-    /**
-     Returns an array of all camera zoom modes.
-     
-     - returns `[CameraZoomClamping]` all camera zoom modes.
-     */
+    /// Returns an array of all camera zoom modes.
+    ///
+    /// - returns `[CameraZoomClamping]` all camera zoom modes.
     static public func allModes() -> [CameraZoomClamping] {
         return [CameraZoomClamping.none, CameraZoomClamping.half, CameraZoomClamping.third, CameraZoomClamping.quarter, CameraZoomClamping.tenth]
     }
     
-    /**
-     Returns the next mode in the list.
-     
-     - returns `CameraZoomClamping` next mode in the list.
-     */
+    /// Returns the next mode in the list.
+    ///
+    /// - returns `CameraZoomClamping` next mode in the list.
     public func next() -> CameraZoomClamping {
         switch self {
             case .none: return .half
@@ -670,20 +613,24 @@ extension SKTiledSceneCamera {
     }
     
     /// Custom camera info description.
-    override public var description: String {
-        guard let scene = scene else { return "Camera: "}
-        let rect = CGRect(origin: scene.convert(position, from: self), size: bounds.size)
-        let uiScale = getContentScaleFactor()
-        let scaleString = (uiScale > 1) ? ", scale: \(uiScale)" : ""
-        let sizeString = "origin: \(Int(rect.origin.x)), \(Int(rect.origin.y)), size: \(Int(rect.size.width)) x \(Int(rect.size.height))\(scaleString)"
+    nonisolated override public var description: String {
+        MainActor.assumeIsolated {
+            guard let scene = scene else { return "Camera: "}
+            let rect = CGRect(origin: scene.convert(position, from: self), size: viewBounds.size)
+            let uiScale = getContentScaleFactor()
+            let scaleString = (uiScale > 1) ? ", scale: \(uiScale)" : ""
+            let sizeString = "origin: \(Int(rect.origin.x)), \(Int(rect.origin.y)), size: \(Int(rect.size.width)) x \(Int(rect.size.height))\(scaleString)"
         
-        let result = "Camera: \(sizeString), zoom: \(zoom.roundTo())"
-        return "\(result)\(clampDescription)"
+            let result = "Camera: \(sizeString), zoom: \(zoom.roundTo())"
+            return "\(result)\(clampDescription)"
+        }
     }
     
-    override public var debugDescription: String {
-        let clampString = (zoomClamping != .none) ? ", clamp: \(zoomClamping.minimum)" : ""
-        return "Camera: \(bounds.roundTo()), zoom: \(zoom.roundTo())\(clampString)"
+    nonisolated override public var debugDescription: String {
+        MainActor.assumeIsolated {
+            let clampString = (zoomClamping != .none) ? ", clamp: \(zoomClamping.minimum)" : ""
+            return "Camera: \(viewBounds.roundTo()), zoom: \(zoom.roundTo())\(clampString)"
+        }
     }
 }
 
@@ -718,11 +665,9 @@ extension SKTiledSceneCamera {
     #if os(iOS)
     // MARK: - Gesture Handlers
     
-    /**
-     Update the scene camera when a pan gesture is recogized.
-     
-     - parameter recognizer: `UIPanGestureRecognizer` pan gesture recognizer.
-     */
+    /// Update the scene camera when a pan gesture is recogized.
+    ///
+    /// - parameter recognizer: `UIPanGestureRecognizer` pan gesture recognizer.
     @objc public func cameraPanned(_ recognizer: UIPanGestureRecognizer) {
         guard (self.scene != nil), (allowMovement == true) else { return }
         
@@ -741,26 +686,22 @@ extension SKTiledSceneCamera {
         }
     }
     
-    /**
-     Handler for double taps.
-     
-     - parameter recognizer: `UITapGestureRecognizer` tap gesture recognizer.
-     */
+    /// Handler for double taps.
+    ///
+    /// - parameter recognizer: `UITapGestureRecognizer` tap gesture recognizer.
     @objc public func sceneDoubleTapped(_ recognizer: UITapGestureRecognizer) {
         if (recognizer.state == UIGestureRecognizer.State.ended && allowPause) {
             let location = recognizer.location(in: recognizer.view)
             for delegate in self.delegates {
                 guard (delegate.receiveCameraUpdates == true) else { continue }
-                delegate.sceneDoubleTapped?(location: location)
+                delegate.sceneDoubleTapped(location: location)
             }
         }
     }
     
-    /**
-     Update the camera scale in the scene.
-     
-     - parameter recognizer: `UIPinchGestureRecognizer`
-     */
+    /// Update the camera scale in the scene.
+    ///
+    /// - parameter recognizer: `UIPinchGestureRecognizer`
     @objc public func scenePinched(_ recognizer: UIPinchGestureRecognizer) {
         guard let scene = self.scene,
             (allowZoom == true) else { return }
@@ -786,35 +727,31 @@ extension SKTiledSceneCamera {
     #if os(macOS)
     // MARK: - Mouse Handlers
     
-    /**
-     Handler for mouse click events.
-     
-     - parameter event: `NSEvent` mouse event.
-     */
+    /// Handler for mouse click events.
+    ///
+    /// - parameter event: `NSEvent` mouse event.
     override public func mouseDown(with event: NSEvent) {
         lastLocation = event.location(in: self)
         
         if (event.clickCount > 1) {
             for delegate in self.delegates {
                 guard (delegate.receiveCameraUpdates == true) else { continue }
-                delegate.sceneDoubleClicked?(event: event)
+                delegate.sceneDoubleClicked(event: event)
             }
         }
     }
     
-    /**
-     Track mouse movement in the scene. Location is in local space, so
-     coordinate origin will be the center of the current window.
-     
-     - parameter event: `NSEvent` mouse event.
-     */
+    /// Track mouse movement in the scene. Location is in local space, so
+    /// coordinate origin will be the center of the current window.
+    ///
+    /// - parameter event: `NSEvent` mouse event.
     override public func mouseMoved(with event: NSEvent) {
         super.mouseMoved(with: event)
         lastLocation = event.location(in: self)
         
         for delegate in self.delegates {
             guard (delegate.receiveCameraUpdates == true) else { continue }
-            delegate.mousePositionChanged?(event: event)
+            delegate.mousePositionChanged(event: event)
         }
     }
     
@@ -825,9 +762,7 @@ extension SKTiledSceneCamera {
         focusLocation = location
     }
     
-    /**
-     Manage mouse wheel zooming. Need to make sure that lastLocation is a location in *this* node.
-     */
+    /// Manage mouse wheel zooming. Need to make sure that lastLocation is a location in *this* node.
     override public func scrollWheel(with event: NSEvent) {
         guard let scene = self.scene as? SKTiledScene else { return }
         
@@ -848,11 +783,9 @@ extension SKTiledSceneCamera {
         //setCameraZoomAtLocation(scale: zoom, location: position)
     }
     
-    /**
-     Callback for mouse drag events.
-     
-     - parameter event: `NSEvent` mouse drag event.
-     */
+    /// Callback for mouse drag events.
+    ///
+    /// - parameter event: `NSEvent` mouse drag event.
     public func scenePositionChanged(with event: NSEvent) {
         guard (self.scene as? SKTiledScene != nil) else { return }
         let location = event.location(in: self)
@@ -868,7 +801,7 @@ extension SKTiledSceneCamera {
             lastLocation = location
             
             for delegate in delegates {
-                delegate.cameraPositionChanged?(newPosition: position)
+                delegate.cameraPositionChanged(newPosition: position)
             }
             self.updateContainedNodes()
         }
@@ -878,3 +811,9 @@ extension SKTiledSceneCamera {
 
 
 extension SKTiledSceneCamera: Loggable {}
+
+
+/// Weak reference to a camera delegate.
+private struct WeakCameraDelegate {
+    weak var delegate: SKTiledSceneCameraDelegate?
+}

@@ -58,7 +58,9 @@ extension TileObjectOverlay {
         return proxies as? [TileObjectProxy] ?? [TileObjectProxy]()
     }
 
-    override var description: String {
-        return "Objects Overlay: \(objects.count) objects."
+    nonisolated override var description: String {
+        MainActor.assumeIsolated {
+            return "Objects Overlay: \(objects.count) objects."
+        }
     }
 }

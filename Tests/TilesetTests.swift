@@ -30,6 +30,7 @@ import XCTest
 
 
 /// Test tileset objects.
+@MainActor
 class TilesetTests: XCTestCase {
 
     var testBundle: Bundle!
@@ -38,8 +39,8 @@ class TilesetTests: XCTestCase {
 
     let tilesetName = "environment-8x8"
 
-    override func setUp() {
-        super.setUp()
+    override func setUp() async throws {
+        try await super.setUp()
 
         if (testBundle == nil) {
             TiledGlobals.default.loggingLevel = .none
@@ -52,14 +53,11 @@ class TilesetTests: XCTestCase {
 
         if (tilemap == nil) {
             let mapurl = testBundle!.url(forResource: "test-tilemap", withExtension: "tmx")!
-            tilemap = SKTilemap.load(tmxFile: mapurl.path, loggingLevel: .none)
+            tilemap = try? SKTilemap.load(url: mapurl, loggingLevel: .none)
             tileset = tilemap?.getTileset(named: tilesetName)
         }
     }
 
-    override func tearDown() {
-        super.tearDown()
-    }
 
     /**
      Test to see if a named tileset can be properly queried.

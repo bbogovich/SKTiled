@@ -1,6 +1,61 @@
 Change Log
 ==========
 
+2.0
+-----
+
+#### Added
+
+- `SKTilemap.load(named:in:subdirectory:)` loads a map by name from a bundle's resources (folder references are searched)
+- `SKTilemap.load(url:bundle:)` loads a map from a file URL
+- `SKTileset.load(urls:)` preloads tilesets from file URLs
+- `SKTiledScene.setup(named:)`, `SKTiledScene.setup(url:bundle:)` & `SKTiledScene.setup(tilemap:)`; setup can be called before the scene is presented, and replaces the current map
+- `TiledError` (`LocalizedError`) describes loading failures: `resourceNotFound`, `fileNotFound`, `unreadableFile`, `invalidXML`, `invalidContent`, `imageNotFound`, `unsupportedImage` & `unsupportedFeature`
+- `SKTilemap.coordinate(at:in:)` returns the tile coordinate under a point in any node
+- URL-based, throwing image methods: `SKTileset.addTextures(fromSpriteSheet:replace:transparent:)`, `SKTileset.addTilesetTile(_:url:)`, `SKTileset.setDataTexture(_:url:)` & `SKImageLayer.setLayerImage(url:)`, plus `CGImage` variants
+- images can be any format ImageIO decodes (PNG, JPEG, GIF, BMP, HEIC, WebP...)
+- images not found as files are looked up in the bundle's asset catalog
+- the Tiled 1.9+ `class` attribute is read as the object/tile type
+- new multiplatform SwiftUI demo app (macOS, iOS & tvOS) that can open any folder of maps on disk
+- documentation site built with MkDocs; API reference built with DocC (`scripts/build-docs.sh`)
+
+#### Changed
+
+- Swift Package Manager is the only supported installation method
+- requires Xcode 26 or later (swift-tools-version 6.2) and builds in the Swift 6 language mode
+- Requirements updated:
+    - macOS: 14.0
+    - iOS: 17.0
+    - tvOS: 17.0
+- the library is main-actor isolated; maps must be loaded on the main actor
+- loading throws instead of returning `nil`; missing or undecodable images, bad attributes and unsupported encodings throw instead of crashing or failing silently
+- every `source` attribute (tilesets, images, templates, image layers, collection-tileset images) is resolved relative to the file that contains it, as Tiled does; files not found there fall back to the same file name in the map's directory, then in the bundle
+- `SKTiledSceneDelegate.load(tmxFile:)` is now `load(url:bundle:withTilesets:ignoreProperties:loggingLevel:) throws -> SKTilemap`
+- `SKTiledSceneCameraDelegate` is a Swift protocol with default implementations (no `@objc optional` methods)
+
+#### Removed
+
+- Carthage, CocoaPods, prebuilt XCFrameworks and the Xcode framework project
+- the `SKTilemap.load(tmxFile:...)` overloads, `SKTileset.load(tsxFiles:)` and `SKTiledScene.setup(tmxFile:...)`
+- all APIs deprecated in 1.x
+- internal `NotificationCenter` notifications; the public notifications are `Notification.Name.Map.FinishedRendering`, `Notification.Name.Map.RenderStatsUpdated`, `Notification.Name.DataStorage.IsolationModeChanged` & `Notification.Name.Camera.Updated`
+- the iOS, macOS & tvOS demo projects
+- Jazzy documentation build
+
+#### Fixed
+
+- a second loaded map no longer adds its tiles to the first map's cache
+- maps are released when no longer referenced (retain cycles between map, layers, tilesets & camera)
+- tile textures are no longer mutated from background queues (data race)
+- iOS & tvOS builds with current SDKs
+
+#### Breaking
+
+- `bounds` on `SKTile`, `SKTilemap`, `SKTiledLayerObject` & `SKTileObject` is renamed `boundingRect` (it clashed with UIKit's `UICoordinateSpace` on iOS/tvOS)
+- map & tileset loading API (see **Changed** & **Removed**)
+- minimum OS & Xcode versions
+
+
 1.23
 -----
 
