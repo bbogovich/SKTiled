@@ -21,142 +21,25 @@
 //  THE SOFTWARE.
 
 import SwiftUI
-import SpriteKit
-import UniformTypeIdentifiers
 
 
+/// The demo's two examples, in order of complexity: rendering maps, then a playable game built on a map.
 struct ContentView: View {
 
     @Bindable var model: DemoModel
 
-    var body: some View {
-        NavigationSplitView {
-            MapList(model: model)
-        } detail: {
-            MapDetail(model: model)
-        }
-        #if DEBUG
-        .task { await model.writeSnapshotsIfRequested() }
-        #endif
-        #if !os(tvOS)
-        .fileImporter(isPresented: $model.isImportingFolder, allowedContentTypes: [.folder]) { result in
-            if case .success(let folder) = result {
-                model.openFolder(folder)
-            }
-        }
-        #endif
-    }
-}
-
-
-/// Sidebar: bundled maps, and maps from a folder the user opened.
-private struct MapList: View {
-
-    @Bindable var model: DemoModel
+    /// The selected example. Debug builds can start on the game with `SKTILED_DEMO_TAB=lodeRunner`.
+    @State private var selection = ProcessInfo.processInfo.environment["SKTILED_DEMO_TAB"] ?? "maps"
 
     var body: some View {
-        List(selection: $model.selection) {
-            Section("Demo Maps") {
-                ForEach(model.bundledMaps) { entry in
-                    Text(entry.name).tag(entry.id)
-                }
-            }
-            if let folderName = model.folderName {
-                Section(folderName) {
-                    ForEach(model.folderMaps) { entry in
-                        Text(entry.name).tag(entry.id)
-                    }
-                }
-            }
-        }
-        .navigationTitle("SKTiled")
-        #if !os(tvOS)
-        .toolbar {
-            ToolbarItem {
-                Button("Open Folder…", systemImage: "folder") {
-                    model.isImportingFolder = true
-                }
-            }
-        }
-        #endif
-    }
-}
+        TabView(selection: $selection) {
+            MapBrowserView(model: model)
+                .tabItem { Label("Maps", systemImage: "map") }
+                .tag("maps")
 
-
-/// Detail: the map, its debug toggles and an inspector overlay.
-private struct MapDetail: View {
-
-    @Bindable var model: DemoModel
-
-    var body: some View {
-        GeometryReader { geometry in
-            SpriteView(scene: model.scene, debugOptions: [.showsFPS, .showsNodeCount, .showsDrawCount])
-                #if os(macOS) || os(iOS)
-                .onContinuousHover { phase in
-                    switch phase {
-                        case .active(let location):
-                            model.hover(at: location, in: geometry.size)
-                        case .ended:
-                            model.hover(at: nil, in: geometry.size)
-                    }
-                }
-                #endif
-        }
-        .ignoresSafeArea()
-        .overlay {
-            if let message = model.errorMessage {
-                ContentUnavailableView("Map Failed to Load", systemImage: "exclamationmark.triangle", description: Text(message))
-                    .background(.regularMaterial)
-            }
-        }
-        .overlay(alignment: .bottomLeading) {
-            if let info = model.info, model.errorMessage == nil {
-                MapInspector(info: info, coordinate: model.hoveredCoordinate, tileCount: model.hoveredTileCount)
-                    .padding()
-            }
-        }
-        .toolbar {
-            ToolbarItemGroup {
-                Toggle("Grid", systemImage: "grid", isOn: $model.showGrid)
-                Toggle("Bounds", systemImage: "square.dashed", isOn: $model.showBounds)
-                Toggle("Objects", systemImage: "cube", isOn: $model.showObjects)
-                Toggle("Pause", systemImage: "pause", isOn: $model.isPaused)
-                Button("Zoom Out", systemImage: "minus.magnifyingglass") { model.zoom(by: 0.8) }
-                Button("Zoom In", systemImage: "plus.magnifyingglass") { model.zoom(by: 1.25) }
-                Button("Fit", systemImage: "arrow.up.left.and.arrow.down.right") { model.zoomToFit() }
-            }
-        }
-    }
-}
-
-
-/// Map facts and the tile under the pointer.
-private struct MapInspector: View {
-
-    let info: MapInfo
-    let coordinate: CGPoint?
-    let tileCount: Int
-
-    var body: some View {
-        Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 4) {
-            row("Orientation", info.orientation)
-            row("Size", "\(Int(info.size.width)) × \(Int(info.size.height)) tiles")
-            row("Tile size", "\(Int(info.tileSize.width)) × \(Int(info.tileSize.height)) px")
-            row("Contents", "\(info.layers) layers, \(info.tilesets) tilesets, \(info.tiles) tiles, \(info.objects) objects")
-            row("Load time", String(format: "%.0f ms", info.loadTime * 1000))
-            if let coordinate = coordinate {
-                row("Pointer", "\(Int(coordinate.x)), \(Int(coordinate.y)) · \(tileCount) tiles")
-            }
-        }
-        .font(.caption.monospacedDigit())
-        .padding(10)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
-    }
-
-    private func row(_ label: String, _ value: String) -> some View {
-        GridRow {
-            Text(label).foregroundStyle(.secondary)
-            Text(value)
+            LodeRunnerView()
+                .tabItem { Label("Lode Runner", systemImage: "gamecontroller") }
+                .tag("lodeRunner")
         }
     }
 }

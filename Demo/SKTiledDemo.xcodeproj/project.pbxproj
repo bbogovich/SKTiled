@@ -9,11 +9,13 @@
 /* Begin PBXBuildFile section */
 		B75D5377F1EA77803138DCF5 /* SKTiled in Frameworks */ = {isa = PBXBuildFile; productRef = FDD643BBD31C993918D17E6E /* SKTiled */; };
 		70DCF8C6612039CF2A88F62F /* Maps in Resources */ = {isa = PBXBuildFile; fileRef = A16BE3D7FA5E4F60EFE9D2F4 /* Maps */; };
+		3C1F7A2B9D4E5F60718293A4 /* LodeRunner in Resources */ = {isa = PBXBuildFile; fileRef = 4B2E8C1D0F3A5B6C7D8E9F01 /* LodeRunner */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
 		716215CB6AA2B92C606D9E41 /* SKTiledDemo.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SKTiledDemo.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		A16BE3D7FA5E4F60EFE9D2F4 /* Maps */ = {isa = PBXFileReference; lastKnownFileType = folder; path = Maps; sourceTree = "<group>"; };
+		4B2E8C1D0F3A5B6C7D8E9F01 /* LodeRunner */ = {isa = PBXFileReference; lastKnownFileType = folder; path = LodeRunner; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -41,6 +43,7 @@
 			children = (
 				D186DF65514ACC1661E3F1F9 /* SKTiledDemo */,
 				A16BE3D7FA5E4F60EFE9D2F4 /* Maps */,
+				4B2E8C1D0F3A5B6C7D8E9F01 /* LodeRunner */,
 				1E59FA31314768F1C99E4070 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -122,6 +125,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				70DCF8C6612039CF2A88F62F /* Maps in Resources */,
+				3C1F7A2B9D4E5F60718293A4 /* LodeRunner in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

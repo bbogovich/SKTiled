@@ -60,8 +60,8 @@ struct MapInfo {
 final class DemoModel {
 
     /// Scene shown by the `SpriteView`; it resizes with the view.
-    let scene: SKTiledScene = {
-        let scene = SKTiledScene(size: CGSize(width: 1024, height: 768))
+    let scene: DemoScene = {
+        let scene = DemoScene(size: CGSize(width: 1024, height: 768))
         scene.scaleMode = .resizeFill
         return scene
     }()

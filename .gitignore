@@ -24,3 +24,7 @@ site/
 
 # Xcode builds when the build location is relative to the project
 Demo/Build/
+
+# Lode Runner assets: copyrighted, imported locally by scripts/import-lode-runner-assets.sh
+Demo/LodeRunner/*
+!Demo/LodeRunner/README.md
