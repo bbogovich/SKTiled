@@ -130,6 +130,30 @@ final class LoadingTests: XCTestCase {
         XCTAssertTrue(tilemap.debugDrawOptions.contains(.drawGrid))
     }
 
+    func testReplacingAndRemovingTilesKeepsTheCacheInStep() throws {
+        let tilemap = try load("nested/maps/level.tmx")
+        let ground = try XCTUnwrap(tilemap.tileLayers(named: "ground").first)
+        let cachedCount = { tilemap.dataStorage?.allTiles.count ?? -1 }
+        let initial = cachedCount()
+
+        // replacing a tile swaps it in the cache and in the node tree
+        let old = try XCTUnwrap(ground.tileAt(0, 0))
+        let replacement = try XCTUnwrap(ground.addTileAt(0, 0, gid: 3))
+        XCTAssertNil(old.parent)
+        XCTAssertTrue(replacement.parent === ground)
+        XCTAssertEqual(cachedCount(), initial)
+
+        // a texture tile replaces the existing one as well
+        _ = ground.addTileAt(1, 0, texture: SKTexture())
+        XCTAssertEqual(ground.children.compactMap { $0 as? SKTile }.count, 8)
+        XCTAssertEqual(cachedCount(), initial)
+
+        // removing a tile drops it from the cache
+        XCTAssertNotNil(ground.removeTileAt(2, 0))
+        XCTAssertNil(ground.tileAt(2, 0))
+        XCTAssertEqual(cachedCount(), initial - 1)
+    }
+
     // MARK: - Errors
 
     func testMissingImageThrows() {

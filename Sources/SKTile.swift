@@ -270,8 +270,13 @@ open class SKTile: SKSpriteNode {
     /// - parameter debug: `Bool` debug draw.
     open func draw(debug: Bool = false) {
         removeAllActions()
-        texture = tileData.texture
-        size = tileData.texture.size()
+        // tiles created from a texture (not tile data) keep their own texture
+        if let dataTexture = tileData.texture {
+            texture = dataTexture
+        }
+        if let texture = texture {
+            size = texture.size()
+        }
         runAnimationAsActions()
     }
 
@@ -355,9 +360,7 @@ open class SKTile: SKSpriteNode {
 
     // MARK: - Legacy Animation
 
-    /// Checks if the tile is animated and runs a [**SpriteKit action**][skaction-url] to animate it.
-    ///
-    /// [skaction-url]:https://developer.apple.com/documentation/spritekit/skaction
+    /// Checks if the tile is animated and runs an `SKAction` to animate it.
     open func runAnimationAsActions() {
         guard (tileData.isAnimated == true) else {
             return

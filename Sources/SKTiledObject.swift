@@ -64,8 +64,6 @@ import SpriteKit
 /// // query a boolean property
 /// let isDynamic = tiledObject.boolForKey("isDynamic") == true
 /// ```
-///
-/// [sktiledobject-url]:Protocols/SKTiledObject.html
 public protocol SKTiledObject: AnyObject {
     /// Unique object id (layer & object names may not be unique).
     var uuid: String { get set }

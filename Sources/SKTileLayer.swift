@@ -379,13 +379,16 @@ public class SKTileLayer: SKTiledLayerObject {
         guard isValid(coord: coord) else {
             return nil
         }
-        
+
+        // remove the current tile
+        let existingTile = removeTileAt(coord: coord)
+
         let Tile = (tilemap.delegate != nil) ? tilemap.delegate!.objectForTileType(named: tileType) : SKTile.self
         let tile = Tile.init()
-        
+
         tile.tileSize = tileSize
         tile.texture = texture
-        
+
         // set the tile overlap amount
         tile.setTileOverlap(tilemap.tileOverlap)
         tile.highlightColor = highlightColor
@@ -397,8 +400,14 @@ public class SKTileLayer: SKTiledLayerObject {
         // get the position in the layer (plus tileset offset)
         let tilePosition = pointForCoordinate(coord: coord, offsetX: offset.x, offsetY: offset.y)
         tile.position = tilePosition
+
+        if let currentTile = existingTile {
+            tile.zPosition = currentTile.zPosition
+            tile.zRotation = currentTile.zRotation
+        }
+
         addChild(tile)
-        
+
         // add to tile cache
         tilemap?.dataStorage?.tileAdded(tile)
 
@@ -459,6 +468,7 @@ public class SKTileLayer: SKTiledLayerObject {
         if let current = current {
             current.removeFromParent()
             self.tiles[Int(coord.x), Int(coord.y)] = nil
+            tilemap?.dataStorage?.tileRemoved(current)
         }
         return current
     }

@@ -92,6 +92,17 @@ internal class TileDataStorage: Loggable {
         addTileToCache(tile: tile)
     }
 
+    /// Removes a tile from whichever cache holds it (a tile may have moved between caches when its
+    /// render mode changed), so removed tiles are neither updated nor kept alive.
+    func tileRemoved(_ tile: SKTile) {
+        for list in staticTileCache.values {
+            list.remove(where: { $0 === tile })
+        }
+        for list in animatedTileCache.values {
+            list.remove(where: { $0 === tile })
+        }
+    }
+
     /// Adds an object to the objects list.
     func objectAdded(_ object: SKTileObject) {
         guard objectsList.contains(where: { $0 == object }) == false else {

@@ -103,7 +103,7 @@ internal class Logger {
                                                  symbol: symbol, file: file,
                                                  method: method, line: line)
 
-            let outputStream = (loggingLevel.rawValue < 3) ? stderr : stdout
+            let outputStream = (level.rawValue <= LoggingLevel.error.rawValue) ? stderr : stdout
             fputs("\(formattedMessage)\n", outputStream)
         }
     }

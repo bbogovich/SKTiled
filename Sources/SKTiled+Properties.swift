@@ -123,7 +123,7 @@ extension SKTilemap {
                 ignoreBackground = boolForKey(attr)
             }
 
-            if (lattr == "antialiasLines") {
+            if (lattr == "antialiaslines") {
                 antialiasLines = boolForKey(attr)
             }
 

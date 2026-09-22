@@ -696,11 +696,10 @@ nonisolated extension SKColor {
         return SKColor(hue: components.h, saturation: components.s, brightness: components.b * factor, alpha: components.a)
     }
 
-    /// Initialize an [`SKColor`][skcolor-url] with a hexadecimal string.
+    /// Initialize an `SKColor` with a hexadecimal string.
     ///
     /// - parameter hexString:  `String` hexidecimal code.
     /// - returns: `SKColor`
-    /// [skcolor-url]:https://developer.apple.com/reference/spritekit/skcolor
     public convenience init(hexString: String) {
         let hex = expandShortenedHexString(hexString)
         var hexNumber = UInt64()

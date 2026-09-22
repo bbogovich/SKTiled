@@ -83,14 +83,14 @@ internal enum StaggerIndex: UInt8 {
 /// Describes how the tilemap updates its tiles in your scene. Changing this property will affect your CPU usage, so use it carefully.
 ///
 ///
-/// The default mode is `TileUpdateMode.dynamic`, which updates tiles as needed each frame. For best performance, use `TileUpdateMode.actions`, which will
-/// run SpriteKit actions on animated tiles.
+/// The default mode is `TileUpdateMode.actions` (set by `TiledGlobals.default.updateMode`), which runs SpriteKit
+/// actions on animated tiles and needs no per-frame work. `dynamic` and `full` update tile textures in `SKTilemap.update(_:)`.
 ///
 /// ### Usage
 ///
 /// ```swift
 /// // passing the tile update mode to the load function
-/// let tilemap = SKTilemap.load(tmxFile: String, updateMode: TileUpdateMode.dynamic)!
+/// let tilemap = try SKTilemap.load(named: "dungeon", updateMode: .dynamic)
 ///
 /// // updating the attribute on the tilemp node
 /// tilemap.updateMode = TileUpdateMode.actions
@@ -114,16 +114,15 @@ public enum TileUpdateMode: Int {
 /// ## Overview
 ///
 /// The `SKTilemap` class is a container for managing layers of tiles (sprites),
-/// vector objects & images. Tile data is stored in [`SKTileset`][tileset-url] tile sets.
+/// vector objects & images. Tile data is stored in ``SKTileset`` tile sets.
 ///
 /// ### Usage
 ///
-/// Maps can be loaded with the class function `SKTilemap.load(tmxFile:)`:
+/// Maps are loaded with `SKTilemap.load(named:in:subdirectory:)` or `SKTilemap.load(url:)`:
 ///
 /// ```swift
-/// if let tilemap = SKTilemap.load(tmxFile: "myfile.tmx") {
-///    scene.addChild(tilemap)
-/// }
+/// let tilemap = try SKTilemap.load(named: "dungeon")
+/// scene.addChild(tilemap)
 /// ```
 ///
 /// ### Properties
@@ -138,8 +137,6 @@ public enum TileUpdateMode: Int {
 /// | tilesets    | Array of stored tileset instances.            |
 /// | allowZoom   | Allow camera zooming.                         |
 /// | layers      | Array of child layers.                        |
-///
-/// [tileset-url]:SKTileset.html
 public class SKTilemap: SKEffectNode, SKTiledObject {
 
     /// ## Overview
