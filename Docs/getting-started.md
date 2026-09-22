@@ -79,6 +79,8 @@ The repository includes a demo application that can be used to quickly test your
 - the toolbar toggles the grid, layer bounds, objects, pausing, zoom and fitting the map to the view
 - the inspector shows facts about the current map and the tile coordinate under the pointer
 
+See [**Demo App**](developer/demo-app.md) for how the demo works and how its code is organised, and [**Creating a SwiftUI App**](developer/swiftui-app.md) to set up your own project.
+
 To run the demo on a device, select your own development team in the target's **Signing & Capabilities** tab. For more information, see the [**Apple Development Documentation**][apple-code-signing-url] on code signing requirements.
 
 

@@ -28,6 +28,7 @@ xcodebuild docbuild \
     SYMROOT="$BUILD/products" \
     OBJROOT="$BUILD/intermediates" \
     SHARED_PRECOMPS_DIR="$BUILD/intermediates/PrecompiledHeaders" \
+    OTHER_DOCC_FLAGS="--warnings-as-errors" \
     -quiet
 
 # SYMROOT/OBJROOT keep the output here even when Xcode's build location is set to a custom folder

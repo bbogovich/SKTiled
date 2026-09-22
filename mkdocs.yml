@@ -23,6 +23,7 @@ theme:
   name: material
   features:
     - navigation.sections
+    - navigation.indexes
     - navigation.top
     - content.code.copy
     - toc.follow
@@ -64,4 +65,10 @@ nav:
       - Other API Features: other-api-features.md
   - Debugging: debugging.md
   - Troubleshooting: troubleshooting.md
+  - Developer Guide:
+      - developer/index.md
+      - Creating a SwiftUI App: developer/swiftui-app.md
+      - Demo App: developer/demo-app.md
+      - How SKTiled Works: developer/internals.md
+      - Working on SKTiled: developer/contributing.md
   - API Reference: api/documentation/sktiled/index.html
