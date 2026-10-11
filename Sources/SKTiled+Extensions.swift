@@ -47,15 +47,25 @@ public typealias float2 = SIMD2<Float>
 // MARK: - Global Functions
 
 
+// The library's own version. These are constants rather than `Bundle(for:)` lookups: under
+// Swift Package Manager the library is linked into the host, so `Bundle(for: SKTilemap.self)`
+// is the host app's bundle and would report the app's version. Keep in step with CHANGELOG.md.
+
+/// SKTiled version string (major.minor.patch).
+private let sktiledVersionString = "2.0.0"
+
+/// SKTiled version as an integer string (`major * 1000000 + minor * 10000 + patch * 100 + build`).
+private let sktiledBuildVersionString = "2000000"
+
+/// SKTiled version suffix (ie: `beta`), or `nil` for a release.
+private let sktiledVersionSuffix: String? = nil
+
+
 /// Returns current framework version.
 ///
 /// - returns: `String` SKTiled framework version.
 func getSKTiledVersion() -> String {
-    var sktiledVersion = "0"
-    if let sdkVersion = Bundle(for: SKTilemap.self).infoDictionary?["CFBundleShortVersionString"] {
-        sktiledVersion = "\(sdkVersion)"
-    }
-    return sktiledVersion
+    return sktiledVersionString
 }
 
 
@@ -63,22 +73,14 @@ func getSKTiledVersion() -> String {
 ///
 /// - returns: `String` SKTiled framework build version.
 func getSKTiledBuildVersion() -> String? {
-    var buildVersion: String? = nil
-    if let bundleVersion = Bundle(for: SKTilemap.self).infoDictionary?["CFBundleVersion"] {
-        buildVersion = "\(bundleVersion)"
-    }
-    return buildVersion
+    return sktiledBuildVersionString
 }
 
 /// Returns current framework version suffix (ie: `beta`).
 ///
 /// - Returns: SKTiled framework version suffix.
 internal func getSKTiledVersionSuffix() -> String? {
-    var versionSuffix: String?
-    if let bundleSuffixValue = Bundle(for: SKTilemap.self).infoDictionary?["CFBundleVersionSuffix"] {
-        versionSuffix = "\(bundleSuffixValue)"
-    }
-    return versionSuffix
+    return sktiledVersionSuffix
 }
 
 
@@ -103,7 +105,7 @@ public func SKTiledGlobals() {
 public func getContentScaleFactor() -> CGFloat {
     var scaleFactor: CGFloat = 1.0
     #if os(macOS)
-    scaleFactor = NSScreen.main!.backingScaleFactor
+    scaleFactor = NSScreen.main?.backingScaleFactor ?? 1
     #endif
 
     #if os(iOS)
@@ -124,21 +126,18 @@ public func getContentScaleFactor() -> CGFloat {
 /// - returns: `Double` scaled percentage of CPU power used by the current app.
 public func cpuUsage() -> Double {
     var kr: kern_return_t
-    var task_info_count: mach_msg_type_number_t
-
-    task_info_count = mach_msg_type_number_t(TASK_INFO_MAX)
-    var tinfo = [integer_t](repeating: 0, count: Int(task_info_count))
-
-    kr = task_info(mach_task_self_, task_flavor_t(TASK_BASIC_INFO), &tinfo, &task_info_count)
-    if kr != KERN_SUCCESS {
-        return -1
-    }
 
     var thread_list: thread_act_array_t?
     var thread_count: mach_msg_type_number_t = 0
     defer {
+        // release each thread port and the array `task_threads` allocated in our address space.
         if let thread_list = thread_list {
-            vm_deallocate(mach_task_self_, vm_address_t(UnsafePointer(thread_list).pointee), vm_size_t(thread_count))
+            for j in 0 ..< Int(thread_count) {
+                mach_port_deallocate(mach_task_self_, thread_list[j])
+            }
+            vm_deallocate(mach_task_self_,
+                          vm_address_t(bitPattern: thread_list),
+                          vm_size_t(Int(thread_count) * MemoryLayout<thread_t>.stride))
         }
     }
 
@@ -201,6 +200,7 @@ internal func convertThreadInfoToThreadBasicInfo(_ threadInfo: [integer_t]) -> t
 public func imageOfSize(_ size: CGSize, scale: CGFloat = 1, _ whatToDraw: (_ context: CGContext, _ bounds: CGRect, _ scale: CGFloat) -> Void) -> CGImage? {
     // create an image of size, not opaque, not scaled
     UIGraphicsBeginImageContextWithOptions(size, false, scale)
+    defer { UIGraphicsEndImageContext() }
 
     guard let context = UIGraphicsGetCurrentContext() else {
         return nil
@@ -209,9 +209,7 @@ public func imageOfSize(_ size: CGSize, scale: CGFloat = 1, _ whatToDraw: (_ con
     context.interpolationQuality = .high
     let bounds = CGRect(origin: CGPoint.zero, size: size)
     whatToDraw(context, bounds, scale)
-    let result = UIGraphicsGetImageFromCurrentImageContext()
-    UIGraphicsEndImageContext()
-    return result!.cgImage!
+    return UIGraphicsGetImageFromCurrentImageContext()?.cgImage
 }
 
 #else
@@ -226,7 +224,10 @@ public func imageOfSize(_ size: CGSize, scale: CGFloat = 1, _ whatToDraw: (_ con
     let scaledSize = size
     let image = NSImage(size: scaledSize)
     image.lockFocus()
-    let nsContext = NSGraphicsContext.current!
+    guard let nsContext = NSGraphicsContext.current else {
+        image.unlockFocus()
+        return nil
+    }
     nsContext.imageInterpolation = .medium
     let context = nsContext.cgContext
     let bounds = CGRect(origin: CGPoint.zero, size: size)
@@ -237,7 +238,7 @@ public func imageOfSize(_ size: CGSize, scale: CGFloat = 1, _ whatToDraw: (_ con
 
     // force the buffer to empty
     nsContext.flushGraphics()
-    return imageRef!
+    return imageRef
 }
 #endif
 
@@ -245,15 +246,19 @@ public func imageOfSize(_ size: CGSize, scale: CGFloat = 1, _ whatToDraw: (_ con
 
 /// Check a tile ID for. Returns the translated tile ID and the corresponding flip flags.
 ///
+/// All four of Tiled's flag bits are cleared from the returned `gid`, including the hexagonal
+/// 120° rotation bit (`0x10000000`), which is not otherwise reported.
+///
 /// - parameter id: `UInt32` tile ID
 /// - returns: tuple of global id and flip flags.
 public func flippedTileFlags(id: UInt32) -> (gid: UInt32, hflip: Bool, vflip: Bool, dflip: Bool) {
     // masks for tile flipping
+    let rotatedHexagonal120Flag: UInt32 = 0x10000000
     let flippedDiagonalFlag: UInt32   = 0x20000000
     let flippedVerticalFlag: UInt32   = 0x40000000
     let flippedHorizontalFlag: UInt32 = 0x80000000
 
-    let flippedAll = (flippedHorizontalFlag | flippedVerticalFlag | flippedDiagonalFlag)
+    let flippedAll = (flippedHorizontalFlag | flippedVerticalFlag | flippedDiagonalFlag | rotatedHexagonal120Flag)
     let flippedMask = ~(flippedAll)
 
     let flipHoriz: Bool = (id & flippedHorizontalFlag) != 0
@@ -294,16 +299,14 @@ nonisolated extension BinaryInteger {
 nonisolated extension Int {
     /// returns number of digits in Int number
     public var digitCount: Int {
-        return numberOfDigits(in: self)
-    }
-
-    // private recursive method for counting digits
-    private func numberOfDigits(in number: Int) -> Int {
-        if abs(number) < 10 {
-            return 1
-        } else {
-            return 1 + numberOfDigits(in: number/10)
+        // `magnitude` is a `UInt`, so `Int.min` does not trap the way `abs(_:)` does.
+        var value = self.magnitude
+        var count = 1
+        while value >= 10 {
+            value /= 10
+            count += 1
         }
+        return count
     }
 
     public init(bitComponents : [Int]) {
@@ -607,16 +610,22 @@ extension SKNode {
 
     /// Run an action with key & optional completion function.
     ///
-    /// - parameter action:     `SKAction!` SpriteKit action.
-    /// - parameter withKey:    `String!` action key.
+    /// - parameter action:     `SKAction` SpriteKit action.
+    /// - parameter withKey:    `String?` action key; `nil` runs the action without a key.
     /// - parameter block: `() -> Void?` optional completion function.
-    public func run(_ action: SKAction!, withKey: String!, completion block: (() -> Void)?) {
+    public func run(_ action: SKAction, withKey: String?, completion block: (() -> Void)?) {
+        guard let key = withKey else {
+            if let block = block {
+                run(action, completion: block)
+            } else {
+                run(action)
+            }
+            return
+        }
         if let block = block {
-            let completionAction = SKAction.run( block )
-            let compositeAction = SKAction.sequence([ action, completionAction ])
-            run(compositeAction, withKey: withKey)
+            run(SKAction.sequence([ action, SKAction.run(block) ]), withKey: key)
         } else {
-            run(action, withKey: withKey)
+            run(action, withKey: key)
         }
     }
 
@@ -698,22 +707,26 @@ nonisolated extension SKColor {
 
     /// Initialize an `SKColor` with a hexadecimal string.
     ///
+    /// Accepts the formats **Tiled** writes, with or without a leading `#`: `RRGGBB` and
+    /// `AARRGGBB` (alpha first, ie: `#ff3271d3` is opaque `#3271d3`), plus the shortened
+    /// `RGB` and `ARGB` forms. A string that is not valid hexadecimal produces a clear color.
+    ///
     /// - parameter hexString:  `String` hexidecimal code.
     /// - returns: `SKColor`
     public convenience init(hexString: String) {
         let hex = expandShortenedHexString(hexString)
-        var hexNumber = UInt64()
-        Scanner(string: hex).scanHexInt64(&hexNumber)
         let a, r, g, b: UInt64
-        switch hex.count {
-            case 3: // RGB (12-bit)
-                (a, r, g, b) = (255, (hexNumber >> 8) * 17, (hexNumber >> 4 & 0xF) * 17, (hexNumber & 0xF) * 17)
-            case 6: // RGB (24-bit)
-                (a, r, g, b) = (255, hexNumber >> 16, hexNumber >> 8 & 0xFF, hexNumber & 0xFF)
-            case 8: // ARGB (32-bit)
-                (a, r, g, b) = (hexNumber & 0x000000ff, hexNumber >> 24 & 0xFF, hexNumber >> 16 & 0xFF, hexNumber >> 8 & 0xFF)
-            default:
-                (a, r, g, b) = (0, 0, 0, 0)
+        if hex.allSatisfy(\.isHexDigit), let hexNumber = UInt64(hex, radix: 16) {
+            switch hex.count {
+                case 6: // RRGGBB (24-bit)
+                    (a, r, g, b) = (255, hexNumber >> 16, hexNumber >> 8 & 0xFF, hexNumber & 0xFF)
+                case 8: // AARRGGBB (32-bit), as written by Tiled
+                    (a, r, g, b) = (hexNumber >> 24 & 0xFF, hexNumber >> 16 & 0xFF, hexNumber >> 8 & 0xFF, hexNumber & 0xFF)
+                default:
+                    (a, r, g, b) = (0, 0, 0, 0)
+            }
+        } else {
+            (a, r, g, b) = (0, 0, 0, 0)
         }
         self.init(red: CGFloat(r) / 255, green: CGFloat(g) / 255, blue: CGFloat(b) / 255, alpha: CGFloat(a) / 255)
     }
@@ -743,26 +756,31 @@ nonisolated extension SKColor {
         return (comps[0], comps[1], comps[2], comps[3])
     }
 
-    /// Returns the individual color RGBA components as integer values.
+    /// Returns the individual color RGBA components as integer values (0-255, rounded).
     ///
     /// - returns: RGBA color components.
-    internal var integerCompoments: (r: Int, g: Int, b: Int, a: Int) {
+    internal var integerComponents: (r: Int, g: Int, b: Int, a: Int) {
         let comps = components
-        let r = Int(comps.r * 255)
-        let g = Int(comps.g * 255)
-        let b = Int(comps.b * 255)
-        let a = Int(comps.a * 255)
+        let r = Int((comps.r * 255).rounded())
+        let g = Int((comps.g * 255).rounded())
+        let b = Int((comps.b * 255).rounded())
+        let a = Int((comps.a * 255).rounded())
         return (r,g,b,a)
     }
 
-    ///  Returns a hexadecimal string representation of the color.
+    /// Misspelled alias of `integerComponents`, kept for existing callers.
+    internal var integerCompoments: (r: Int, g: Int, b: Int, a: Int) {
+        return integerComponents
+    }
+
+    ///  Returns a hexadecimal string representation of the color, in **Tiled**'s format:
+    ///  `#rrggbb` for an opaque color, `#aarrggbb` (alpha first) otherwise.
     ///
     /// - returns: `String` hexadecimal string.
     public func hexString() -> String {
-        let comps = integerCompoments
-        var rgbHex = "#\(String(format: "%02x%02x%02x", comps.r, comps.g, comps.b))"
-        rgbHex += (comps.a == 255) ? "" : String(format: "%02x", comps.a)
-        return rgbHex
+        let comps = integerComponents
+        let rgbHex = String(format: "%02x%02x%02x", comps.r, comps.g, comps.b)
+        return (comps.a == 255) ? "#\(rgbHex)" : "#\(String(format: "%02x", comps.a))\(rgbHex)"
     }
 
     /*
@@ -829,12 +847,8 @@ nonisolated extension SKColor {
     ///
     /// - Returns: RGBA component string description.
     public var rgbaDescription: String {
-        let comps = components
-        let r = Int(comps.r * 255)
-        let g = Int(comps.g * 255)
-        let b = Int(comps.b * 255)
-        let a = Int(comps.a * 255)
-        return "SKColor(r: \(r), g: \(g), b: \(b), a: \(a))"
+        let comps = integerComponents
+        return "SKColor(r: \(comps.r), g: \(comps.g), b: \(comps.b), a: \(comps.a))"
     }
 
     /// Returns a string description of the color RGBA float components.
@@ -907,16 +921,6 @@ nonisolated extension String {
         return self.replacingOccurrences(of: pattern, with: replaceWith)
     }
 
-    /// Initialize with array of bytes.
-    ///
-    /// - parameter bytes: `[UInt8]` byte array.
-    public init(_ bytes: [UInt8]) {
-        self.init()
-        for byte in bytes {
-            self.append(String(UnicodeScalar(byte)))
-        }
-    }
-
     /// Clean up whitespace & carriage returns.
     ///
     /// - returns: `String` scrubbed string.
@@ -965,7 +969,7 @@ nonisolated extension String {
     /// Returns true if the string represents a path that exists and is a directory.
     var isDirectory: Bool {
         var isDir : ObjCBool = false
-        return FileManager.default.fileExists(atPath: self, isDirectory: &isDir)
+        return FileManager.default.fileExists(atPath: self.url.path, isDirectory: &isDir) && isDir.boolValue
     }
 
     /// Returns the filename if string is a url.
@@ -1014,7 +1018,7 @@ nonisolated extension URL {
     /// Returns true if the URL represents a path that exists and is a directory.
     var isDirectory: Bool {
         var isDir : ObjCBool = false
-        return FileManager.default.fileExists(atPath: self.path, isDirectory: &isDir)
+        return FileManager.default.fileExists(atPath: self.path, isDirectory: &isDir) && isDir.boolValue
     }
 
     /// Returns true if the URL represents a path in the app bundle.
@@ -1033,7 +1037,7 @@ nonisolated extension String {
         let pattern = "^#?([0-9A-F]{3}){1,2}$|^#?([0-9A-F]{4}){1,2}$"
         do {
             let regex = try NSRegularExpression(pattern: pattern, options: NSRegularExpression.Options.caseInsensitive)
-            let numberOfMatches = regex.numberOfMatches(in: self, options: [], range: NSMakeRange(0, self.count))
+            let numberOfMatches = regex.numberOfMatches(in: self, options: [], range: NSRange(location: 0, length: self.utf16.count))
 
             if (numberOfMatches != 1) {
                 return false
@@ -1123,6 +1127,13 @@ nonisolated extension OptionSet where RawValue: FixedWidthInteger {
 
 
 
+/// Per-shape starting colors for `SKAction.colorFadeAction(after:)`.
+private final class ColorFadeStartColors {
+    typealias RGBA = (red: CGFloat, green: CGFloat, blue: CGFloat, alpha: CGFloat)
+    var colors: [ObjectIdentifier: (stroke: RGBA, fill: RGBA)] = [:]
+}
+
+
 extension SKAction {
 
     /// Custom action to animate sprite textures with varying frame durations.
@@ -1153,17 +1164,25 @@ extension SKAction {
     public class func colorFadeAction(after delay: TimeInterval) -> SKAction {
         // Create a custom action for color fade
         let duration: TimeInterval = 1.0
+        // The starting colors of each shape, captured on the first frame so the fade
+        // interpolates from them rather than from the already-faded current colors.
+        let startColors = ColorFadeStartColors()
         let action = SKAction.customAction(withDuration: duration) {(node, elapsed) in
             if let shape = node as? SKShapeNode {
 
-                let currentStroke = shape.strokeColor
-                let currentFill = shape.fillColor
+                let shapeID = ObjectIdentifier(shape)
+                let start = startColors.colors[shapeID] ?? (stroke: shape.strokeColor.rgb, fill: shape.fillColor.rgb)
 
                 // Calculate the changing color during the elapsed time.
-                let fraction = elapsed / CGFloat(duration)
+                let fraction = min(elapsed / CGFloat(duration), 1)
+                if (fraction >= 1) {
+                    startColors.colors[shapeID] = nil
+                } else {
+                    startColors.colors[shapeID] = start
+                }
 
-                let currentStrokeRGB = currentStroke.rgb
-                let currentFillRGB = currentFill.rgb
+                let currentStrokeRGB = start.stroke
+                let currentFillRGB = start.fill
                 let endColorRGB: (red: CGFloat, green: CGFloat, blue: CGFloat, alpha: CGFloat) = (0,0,0,0)
 
                 let sred = CGFloat().lerp(start: currentStrokeRGB.red, end: endColorRGB.red, t: fraction)
@@ -1969,13 +1988,10 @@ public func polygonPointArray(_ sides: Int, radius: CGSize, offset: CGFloat = 0,
 ///  - returns: `CGPath` path from the given points.
 public func polygonPath(_ points: [CGPoint], closed: Bool = true) -> CGPath {
     let path = CGMutablePath()
-    var mpoints = points
-    let first = mpoints.remove(at: 0)
-    path.move(to: first)
-
-    for p in mpoints {
-        path.addLine(to: p)
+    guard (points.isEmpty == false) else {
+        return path
     }
+    path.addLines(between: points)
     if (closed == true) { path.closeSubpath() }
     return path
 }
@@ -2150,8 +2166,9 @@ public func arrowFromPoints(startPoint: CGPoint,
 /// - parameter scale:  `CGFloat` device scale.
 /// - returns: `CGPoint` clamped point.
 internal func clampedPosition(point: CGPoint, scale: CGFloat) -> CGPoint {
-    let clampedX = round(Int(point.x * scale) / scale)
-    let clampedY = round(Int(point.y * scale) / scale)
+    // snap to the nearest device pixel (not the nearest point).
+    let clampedX = (point.x * scale).rounded() / scale
+    let clampedY = (point.y * scale).rounded() / scale
     return CGPoint(x: clampedX, y: clampedY)
 }
 

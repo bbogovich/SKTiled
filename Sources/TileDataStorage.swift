@@ -57,6 +57,12 @@ internal class TileDataStorage: Loggable {
     var objectsList: ObjectsList
     var blockNotifications: Bool = true
 
+    /// The cache list each tile is currently stored in, so a tile is in at most one list and can be removed directly.
+    private var tileLists: [ObjectIdentifier: TileList] = [:]
+
+    /// Identities of the objects in `objectsList`.
+    private var objectIDs: Set<ObjectIdentifier> = []
+
     var isolationMode: CacheIsolationMode = CacheIsolationMode.none {
         didSet {
             guard oldValue != isolationMode else { return }
@@ -95,17 +101,12 @@ internal class TileDataStorage: Loggable {
     /// Removes a tile from whichever cache holds it (a tile may have moved between caches when its
     /// render mode changed), so removed tiles are neither updated nor kept alive.
     func tileRemoved(_ tile: SKTile) {
-        for list in staticTileCache.values {
-            list.remove(where: { $0 === tile })
-        }
-        for list in animatedTileCache.values {
-            list.remove(where: { $0 === tile })
-        }
+        removeTileFromCache(tile)
     }
 
     /// Adds an object to the objects list.
     func objectAdded(_ object: SKTileObject) {
-        guard objectsList.contains(where: { $0 == object }) == false else {
+        guard objectIDs.insert(ObjectIdentifier(object)).inserted else {
             return
         }
         objectsList.append(object)
@@ -137,7 +138,6 @@ internal class TileDataStorage: Loggable {
         }
 
 
-        let tileData = tile.tileData
         tile.drawBounds(withColor: nil, zpos: nil, duration: 0)
 
         // indicates the tile has an animation override
@@ -159,9 +159,8 @@ internal class TileDataStorage: Loggable {
             
         // tile will ignore it's tile data
         case .ignore:
-            let existingList: TileList = (tileData.isAnimated == true) ? animatedCacheForTileData(tileData) : cacheForTileData(tileData)
             // remove the tile from the current list
-            existingList.remove(where: { $0 == tile })
+            removeTileFromCache(tile)
 
         // tile has requested new tile data
         case .animated(let gid):
@@ -172,15 +171,11 @@ internal class TileDataStorage: Loggable {
             var newDataIsAnimated = false
 
             if let newTileData = tilemap.getTileData(globalID: globalID) {
-                let existingList: TileList = (tileData.isAnimated == true) ? animatedCacheForTileData(tileData) : cacheForTileData(tileData)
-
-                // remove the tile from the current list
-                existingList.remove(where: { $0 == tile })
-
+                // move the tile from its current list to the new data's list
                 newDataIsAnimated = newTileData.isAnimated
                 let nextList: TileList = (newDataIsAnimated == true) ? animatedCacheForTileData(newTileData) : cacheForTileData(newTileData)
 
-                nextList.append(tile)
+                storeTile(tile, in: nextList)
             }
 
         default:
@@ -242,7 +237,10 @@ internal class TileDataStorage: Loggable {
 
     /// Removes an object from the objects list.
     func objectRemoved(_ object: SKTileObject) {
-        objectsList.remove(where: { $0 == object}) { obj in
+        guard objectIDs.remove(ObjectIdentifier(object)) != nil else {
+            return
+        }
+        objectsList.remove(where: { $0 === object }) { obj in
             self.log("object removed: \(obj)", level: .debug)
             self.tilemap?.objectsOverlay.initialized = false
         }
@@ -258,8 +256,22 @@ internal class TileDataStorage: Loggable {
     func addTileToCache(tile: SKTile, data: SKTilesetData? = nil, cache: TileList? = nil) {
         let tileData = data ?? tile.tileData
         let currentCache: TileList = (cache != nil) ? cache! : (tileData.isAnimated == true) ? animatedCacheForTileData(tileData) : cacheForTileData(tileData)
-        currentCache.append(tile)
-        //tile.draw()
+        storeTile(tile, in: currentCache)
+    }
+
+    /// Stores a tile in a cache list, removing it from the list it was in before.
+    private func storeTile(_ tile: SKTile, in list: TileList) {
+        removeTileFromCache(tile)
+        list.append(tile)
+        tileLists[ObjectIdentifier(tile)] = list
+    }
+
+    /// Removes a tile from the cache list it is stored in, if any.
+    private func removeTileFromCache(_ tile: SKTile) {
+        guard let list = tileLists.removeValue(forKey: ObjectIdentifier(tile)) else {
+            return
+        }
+        list.remove(where: { $0 === tile })
     }
 
     /// Return or create a tile list for the changed data.
@@ -312,18 +324,13 @@ internal class TileDataStorage: Loggable {
             return
         }
 
-        if let oldTileData = tilemap.getTileData(globalID: globalID) {
+        if tilemap.getTileData(globalID: globalID) != nil {
             let nextTileData = tile.tileData
-            
-            // move tile out of an animated data list
-            // put it into another
-            let existingList: TileList = (oldTileData.isAnimated == true) ? animatedCacheForTileData(oldTileData) : cacheForTileData(oldTileData)
-            
-            // remove the tile from the current list
-            existingList.remove(where: { $0 == tile })
+
+            // move tile out of the old data's list and into its own data's list
             let nextDataIsAnimated = nextTileData.isAnimated
             let nextList: TileList = (nextDataIsAnimated == true) ? animatedCacheForTileData(nextTileData) : cacheForTileData(nextTileData)
-            nextList.append(tile)
+            storeTile(tile, in: nextList)
         }
     }
     

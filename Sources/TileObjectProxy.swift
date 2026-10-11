@@ -120,7 +120,8 @@ internal class TileObjectProxy: SKShapeNode, SKTiledGeometry {
                 case .ellipse:
                     objectPath = bezierPath(scaledVertices, closed: true, alpha: object.shapeType.curvature).path
                 default:
-                    objectPath = polygonPath(scaledVertices, closed: true)
+                    // polylines are open paths
+                    objectPath = polygonPath(scaledVertices, closed: object.shapeType != .polyline)
             }
 
             self.path = objectPath
@@ -128,7 +129,8 @@ internal class TileObjectProxy: SKShapeNode, SKTiledGeometry {
 
 
             let currentStrokeColor = (proxyIsVisible == true) ? self.objectColor : SKColor.clear
-            let currentFillColor = (proxyIsVisible == true) ? (isRenderable == false) ? currentStrokeColor.withAlphaComponent(fillOpacity) : SKColor.clear : SKColor.clear
+            let isFilled = (isRenderable == false) && (object.shapeType != .polyline)
+            let currentFillColor = (proxyIsVisible == true) && (isFilled == true) ? currentStrokeColor.withAlphaComponent(fillOpacity) : SKColor.clear
 
             self.strokeColor = currentStrokeColor
             self.fillColor = currentFillColor

@@ -157,11 +157,11 @@ public class TiledGlobals {
     /// | build                 | Framework build versions.    |
     /// | suffix                | Version suffix.              |
     public struct Version {
-        var major: Int = 0
-        var minor: Int = 0
-        var patch: Int = 0
-        var build: Int = 0
-        var suffix: String?
+        public var major: Int = 0
+        public var minor: Int = 0
+        public var patch: Int = 0
+        public var build: Int = 0
+        public var suffix: String?
         
         /// Constructor from major, minor, patch & build values.
         ///
@@ -170,7 +170,7 @@ public class TiledGlobals {
         /// - parameter patch: patch version.
         /// - parameter build: build version.
         /// - parameter suffix: optional suffix.
-        init(major: Int, minor: Int, patch: Int = 0, build: Int = 0, suffix: String? = nil) {
+        public init(major: Int, minor: Int, patch: Int = 0, build: Int = 0, suffix: String? = nil) {
             self.major = major
             self.minor = minor
             self.patch = patch
@@ -193,10 +193,13 @@ public class TiledGlobals {
     /// | text                  | Text object render quality               |
     /// | override              | Override value.                          |
     public struct RenderQuality {
-        var `default`: CGFloat = 3
-        var object: CGFloat = 8
-        var text: CGFloat = 8
-        var override: CGFloat = 0
+        public var `default`: CGFloat = 3
+        public var object: CGFloat = 8
+        public var text: CGFloat = 8
+        public var override: CGFloat = 0
+
+        /// Default render quality values.
+        public init() {}
     }
     
     /// ## Overview
@@ -247,12 +250,12 @@ public class TiledGlobals {
         public struct MouseFilters: OptionSet {
             public let rawValue: Int
             
-            static let tileCoordinates      = MouseFilters(rawValue: 1 << 0)   // 1*
-            static let tileLocalID          = MouseFilters(rawValue: 1 << 1)   // 2
-            static let sceneCoordinates     = MouseFilters(rawValue: 1 << 2)   // 4
-            static let tileDataUnderCursor  = MouseFilters(rawValue: 1 << 3)   // 8*
-            static let tilesUnderCursor     = MouseFilters(rawValue: 1 << 4)   // 16
-            static let objectsUnderCursor   = MouseFilters(rawValue: 1 << 5)   // 32
+            public static let tileCoordinates      = MouseFilters(rawValue: 1 << 0)   // 1*
+            public static let tileLocalID          = MouseFilters(rawValue: 1 << 1)   // 2
+            public static let sceneCoordinates     = MouseFilters(rawValue: 1 << 2)   // 4
+            public static let tileDataUnderCursor  = MouseFilters(rawValue: 1 << 3)   // 8*
+            public static let tilesUnderCursor     = MouseFilters(rawValue: 1 << 4)   // 16
+            public static let objectsUnderCursor   = MouseFilters(rawValue: 1 << 5)   // 32
             
             static public let all: MouseFilters = [.tileCoordinates, .tileLocalID, .sceneCoordinates, .tileDataUnderCursor, .tilesUnderCursor, .objectsUnderCursor]
             
@@ -363,7 +366,7 @@ extension TiledGlobals.Version {
     /// Initialize with a version string (ie "2.1.4").
     ///
     /// - parameter string: `String` version string.
-    init(string: String) {
+    public init(string: String) {
         let digitSet = CharacterSet(charactersIn: "0123456789.")
         let alphaString = String(string.unicodeScalars.filter { digitSet.contains($0) })
         let parts = alphaString.split(separator: ".").compactMap { Int($0) }

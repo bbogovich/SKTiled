@@ -26,6 +26,7 @@
 //  THE SOFTWARE.
 
 import SpriteKit
+import GameplayKit
 
 
 /// Sprite object for visualizaing grid & graph.
@@ -40,6 +41,7 @@ internal class SKTiledDebugDrawNode: SKNode {
 
     private var gridTexture: SKTexture?                      // grid texture
     private var graphTexture: SKTexture?                     // GKGridGraph texture
+    private var graphTextureKey: GraphTextureKey?            // what the graph texture was drawn from
     private var anchorKey: String = "ANCHOR"
 
     init(tileLayer: SKTiledLayerObject, isDefault def: Bool = false) {
@@ -130,6 +132,9 @@ internal class SKTiledDebugDrawNode: SKNode {
     func reset() {
         gridSprite.texture = nil
         graphSprite.texture = nil
+        gridTexture = nil
+        graphTexture = nil
+        graphTextureKey = nil
         childNode(withName: anchorKey)?.removeFromParent()
     }
 
@@ -240,8 +245,6 @@ internal class SKTiledDebugDrawNode: SKNode {
     /// Display the current tile graph (if it exists).
     func drawGraph() {
 
-        // drawLayerGrid
-        graphTexture = nil
         graphSprite.isHidden = true
 
         // get the last z-position
@@ -256,6 +259,14 @@ internal class SKTiledDebugDrawNode: SKNode {
         let imageScale: CGFloat = layer.tilemap.renderQuality
         let lineScale: CGFloat = (layer.tilemap.tileHeightHalf > 8) ? 2 : 1
 
+        // the cached texture is stale if the graph, its nodes, or the render quality changed
+        let graph: GKGridGraph<GKGridGraphNode>? = layer.graph
+        let textureKey = GraphTextureKey(graph: graph.map { ObjectIdentifier($0) },
+                                         nodeCount: graph?.nodes?.count ?? 0,
+                                         imageScale: imageScale)
+        if (textureKey != graphTextureKey) {
+            graphTexture = nil
+        }
 
         // generate the texture
         if (graphTexture == nil) {
@@ -264,6 +275,7 @@ internal class SKTiledDebugDrawNode: SKNode {
 
                 graphTexture = SKTexture(cgImage: graphImage)
                 graphTexture?.filteringMode = .linear
+                graphTextureKey = textureKey
 
                 // sprite scaling factor
                 let spriteScaleFactor: CGFloat = (1 / imageScale)
@@ -304,7 +316,16 @@ internal class SKTiledDebugDrawNode: SKNode {
         graphSprite.texture = nil
         gridTexture = nil
         graphTexture = nil
+        graphTextureKey = nil
     }
+}
+
+
+/// Identifies the graph state a graph texture was drawn from.
+private struct GraphTextureKey: Equatable {
+    let graph: ObjectIdentifier?
+    let nodeCount: Int
+    let imageScale: CGFloat
 }
 
 

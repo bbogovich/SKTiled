@@ -518,44 +518,12 @@ open class SKTileObject: SKShapeNode, SKTiledObject {
                 let bezierData = bezierPath(bezPoints, closed: true, alpha: shapeType.curvature)
                 self.path = bezierData.path
 
-                //let controlPoints = bezierData.points
-
-                // draw a cage around the curve
-                if (layer.orientation == .isometric) {
-                    let controlPath = polygonPath(translatedVertices)
-                    let controlShape = SKShapeNode(path: controlPath, centered: false)
-                    addChild(controlShape)
-                    controlShape.fillColor = SKColor.clear
-                    controlShape.strokeColor = self.strokeColor.withAlphaComponent(0.2)
-                    controlShape.isAntialiased = layer.antialiased
-                    controlShape.lineWidth = self.lineWidth / 2
-            }
-
             default:
                 let closedPath: Bool = (self.shapeType == .polyline) ? false : true
                 self.path = polygonPath(translatedVertices, closed: closedPath)
         }
 
-        // draw the first point of poly objects
-        if (isPolyType == true) {
-
-            childNode(withName: "FIRST_POINT")?.removeFromParent()
-
-            // MARK: - Tile object drawing
-            if (self.gid == nil) {
-
-                // the first-point radius should be larger for thinner (>1.0) line widths
-                let anchorRadius = self.lineWidth * 1.2
-                let anchor = SKShapeNode(circleOfRadius: anchorRadius)
-                anchor.name = "FIRST_POINT"
-                addChild(anchor)
-                anchor.position = vertices[0].invertedY
-                anchor.strokeColor = SKColor.clear
-                anchor.fillColor = self.strokeColor
-                anchor.isAntialiased = isAntialiased
-            }
-        }
-
+        // MARK: - Tile object drawing
         // if the object has a gid property, render it as a tile
         if let gid = gid {
             guard let tileData = layer.tilemap.getTileData(globalID: gid) else {
@@ -563,23 +531,24 @@ open class SKTileObject: SKShapeNode, SKTiledObject {
                 return
             }
             self.objectType = .tile
-            // in Tiled, tile data type overrides object type
-            self.type = (tileData.type == nil) ? self.type : tileData.type!
+            // in Tiled, the object's own type overrides the tile's type
+            if (self.type == nil || self.type.isEmpty) {
+                self.type = tileData.type
+            }
 
             // grab size from texture if initializing with a gid
             if (size == CGSize.zero) {
                 size = tileData.texture.size()
             }
 
-            let tileAttrs = flippedTileFlags(id: UInt32(gid))
+            let tileAttrs = flippedTileFlags(id: UInt32(truncatingIfNeeded: gid))
 
-            // set the tile data flip flags
-            tileData.flipHoriz = tileAttrs.hflip
-            tileData.flipVert  = tileAttrs.vflip
-            tileData.flipDiag  = tileAttrs.dflip
-
-            // remove existing tile
-            self.tile?.removeFromParent()
+            // remove existing tile, from the scene & the tile cache
+            if let oldTile = self.tile {
+                oldTile.removeFromParent()
+                layer.tilemap?.dataStorage?.tileRemoved(oldTile)
+                self.tile = nil
+            }
 
             if (tileData.texture != nil) {
 
@@ -615,8 +584,11 @@ open class SKTileObject: SKShapeNode, SKTiledObject {
                     tileSprite.isTileObject = true
 
                     // flipped tile flags
-                    tileSprite.xScale = (tileData.flipHoriz == true) ? -1 : 1
-                    tileSprite.yScale = (tileData.flipVert == true) ? -1 : 1
+                    tileSprite.flipHoriz = tileAttrs.hflip
+                    tileSprite.flipVert  = tileAttrs.vflip
+                    tileSprite.flipDiag  = tileAttrs.dflip
+                    tileSprite.xScale = tileAttrs.hflip ? -1 : 1
+                    tileSprite.yScale = tileAttrs.vflip ? -1 : 1
 
                     // add to tile cache
                     layer.tilemap?.dataStorage?.tileAdded(tileSprite)
@@ -677,7 +649,7 @@ open class SKTileObject: SKShapeNode, SKTiledObject {
             let textStyle = NSMutableParagraphStyle()
 
             // text block attributes
-            textStyle.alignment = NSTextAlignment(rawValue: Int(textAttributes.alignment.horizontal.intValue))!
+            textStyle.alignment = textAttributes.alignment.horizontal.textAlignment
             let textFontAttributes: [NSAttributedString.Key : Any] = [
                 NSAttributedString.Key.font: textAttributes.font,
                 NSAttributedString.Key.foregroundColor: textAttributes.fontColor,
@@ -865,9 +837,7 @@ open class SKTileObject: SKShapeNode, SKTiledObject {
 
         if (duration > 0) {
             let fadeAction = SKAction.fadeAfter(wait: duration, alpha: 0)
-            bounds.run(fadeAction, withKey: "FADEOUT_ACTION", completion: {
-                bounds.removeFromParent()
-            })
+            bounds.run(SKAction.sequence([fadeAction, SKAction.removeFromParent()]), withKey: "FADEOUT_ACTION")
         }
     }
 
@@ -893,9 +863,7 @@ open class SKTileObject: SKShapeNode, SKTiledObject {
 
                 if (highlightDuration > 0) {
                     let fadeAction = SKAction.fadeOut(withDuration: highlightDuration)
-                    frameShape.run(fadeAction, completion: {
-                        frameShape.removeFromParent()
-                    })
+                    frameShape.run(SKAction.sequence([fadeAction, SKAction.removeFromParent()]))
                 }
             }
         }
@@ -999,8 +967,6 @@ extension SKTileObject.TiledObjectShape {
 
 
 extension SKTileObject {
-
-    nonisolated override open var hash: Int { MainActor.assumeIsolated { return id.hashValue } }
 
     /// Object description.
     nonisolated override open var description: String {
@@ -1136,57 +1102,14 @@ extension TextObjectAttributes {
 
 extension TextObjectAttributes.TextAlignment.HoriztonalAlignment {
 
-    #if os(iOS) || os(tvOS)
-
-    /// Return a integer value for passing to NSTextAlignment.
-    public var intValue: Int {
+    /// Paragraph alignment for drawing the text.
+    var textAlignment: NSTextAlignment {
         switch self {
-        case .left: return 0
-        case .right: return 1
-        case .center: return 2
+        case .left: return .left
+        case .center: return .center
+        case .right: return .right
         }
     }
-
-    #else
-    /// Return a integer value for passing to NSTextAlignment.
-    public var intValue: UInt {
-        switch self {
-        case .left: return 0
-        case .right: return 1
-        case .center: return 2
-        }
-    }
-    #endif
-}
-
-
-extension TextObjectAttributes.TextAlignment.VerticalAlignment {
-
-    #if os(iOS) || os(tvOS)
-    /// Return an integer value for passing to NSTextAlignment.
-    public var intValue: Int {
-        switch self {
-        case .top:
-        return 0
-        case .center:
-        return 1
-        case .bottom:
-        return 2
-        }
-    }
-    #else
-    /// Return an integer value for passing to NSTextAlignment.
-    public var intValue: UInt {
-        switch self {
-        case .top:
-        return 0
-        case .center:
-        return 1
-        case .bottom:
-        return 2
-        }
-    }
-    #endif
 }
 
 

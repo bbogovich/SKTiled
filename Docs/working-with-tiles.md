@@ -275,7 +275,7 @@ dots.forEach { $0.setupDynamics(radius: 4) }
 
 ## Tile Overlap
 
-The tile overlap value is used to help alleviate the "cracks" that sometimes appear when the tilemap or worldNode is scaled. The value is clamped with the `SKTile.maxOverlap` value. Usually a value between 1.0 - 3.0 is effective. While you can set the overlap value on individual tiles & tile layers, for best results set it via the `SKTilemap.tileOverlap` property:
+The tile overlap value is used to help alleviate the "cracks" that sometimes appear when the tilemap or worldNode is scaled. The value is clamped with the `SKTile.maxOverlap` value. Usually a value between 1.0 - 3.0 is effective. Overlap is off (0) by default, so tiles draw at their exact size unless you set it. While you can set the overlap value on individual tiles & tile layers, for best results set it via the `SKTilemap.tileOverlap` property:
 
 ```swift
 // this will override values for every tile

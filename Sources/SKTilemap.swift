@@ -213,7 +213,9 @@ public class SKTilemap: SKEffectNode, SKTiledObject {
 
     // Update time properties.
     private var lastUpdateTime: TimeInterval = 0
-    private let maximumUpdateDelta: TimeInterval = 1.0 / 60.0
+    /// Longest frame interval passed to animations; longer gaps (a stall, the app in the background) are capped
+    /// so animations don't jump, while ordinary frame rates (30 fps and below) still run at full speed.
+    private let maximumUpdateDelta: TimeInterval = 0.25
 
     // MARK: Dispatch Queues
 
@@ -242,16 +244,6 @@ public class SKTilemap: SKEffectNode, SKTiledObject {
         didSet {
             guard renderQuality != oldValue else { return }
             layers.forEach { $0.renderQuality = renderQuality.clamped(1, maxRenderQuality) }
-        }
-    }
-
-    /// Map animation speed
-    override public var speed: CGFloat {
-        didSet {
-            guard oldValue != speed else { return }
-            self.layers.forEach { layer in
-                layer.speed = speed
-            }
         }
     }
 
@@ -311,6 +303,9 @@ public class SKTilemap: SKEffectNode, SKTiledObject {
     // Internal layer storage.
     private var _layers: Set<SKTiledLayerObject> = []
 
+    // Cached result of `layers`; cleared whenever a layer is added, removed or re-indexed.
+    private var _flattenedLayers: [SKTiledLayerObject]?
+
     /// Layer count.
     public var layerCount: Int { return self.layers.count }
 
@@ -348,13 +343,23 @@ public class SKTilemap: SKEffectNode, SKTiledObject {
 
     // MARK: Layers
 
-    /// Returns a flattened array of child layers.
+    /// Returns a flattened array of child layers in render order: each level is sorted by index (lowest first),
+    /// and a group is followed by its own child layers.
     public var layers: [SKTiledLayerObject] {
+        if let cached = _flattenedLayers {
+            return cached
+        }
         var result: [SKTiledLayerObject] = []
-        for layer in _layers.sorted(by: { $0.index > $1.index }) where layer as? BackgroundLayer == nil {
+        for layer in _layers.sorted(by: { $0.index < $1.index }) where layer as? BackgroundLayer == nil {
             result += layer.layers
         }
+        _flattenedLayers = result
         return result
+    }
+
+    /// Clears the cached `layers` array. Called when the layer tree changes.
+    internal func invalidateLayerCache() {
+        _flattenedLayers = nil
     }
 
     /// The tile map default layer, used for displaying the current grid, getting coordinates, etc.
@@ -484,8 +489,9 @@ public class SKTilemap: SKEffectNode, SKTiledObject {
         return layers.isEmpty == false ? layers.map { $0.actualZPosition }.max()! : 0
     }
 
-    /// Tile overlap amount. 1 is typically a good value.
-    public var tileOverlap: CGFloat = 1.0 {
+    /// Tile overlap amount, in pixels. The default of 0 draws tiles at their exact size; a value of 1 is usually
+    /// enough to hide seams when the map is scaled.
+    public var tileOverlap: CGFloat = 0 {
         didSet {
             guard oldValue != tileOverlap else { return }
             for tileLayer in tileLayers(recursive: true) {
@@ -526,7 +532,7 @@ public class SKTilemap: SKEffectNode, SKTiledObject {
     /// - parameter recursive: `Bool` include nested layers.
     /// - returns: `[SKTileLayer]` array of tile layers.
     public func tileLayers(recursive: Bool = true) -> [SKTileLayer] {
-        return getLayers(recursive: recursive).sorted(by: { $0.index < $1.index }).filter { $0 as? SKTileLayer != nil } as! [SKTileLayer]
+        return getLayers(recursive: recursive).compactMap { $0 as? SKTileLayer }
     }
 
     /// Return all object groups. If recursive is false, only returns top-level layers.
@@ -534,7 +540,7 @@ public class SKTilemap: SKEffectNode, SKTiledObject {
     /// - parameter recursive: `Bool` include nested layers.
     /// - returns: `[SKObjectGroup]` array of object groups.
     public func objectGroups(recursive: Bool = true) -> [SKObjectGroup] {
-        return getLayers(recursive: recursive).sorted(by: { $0.index < $1.index }).filter { $0 as? SKObjectGroup != nil } as! [SKObjectGroup]
+        return getLayers(recursive: recursive).compactMap { $0 as? SKObjectGroup }
     }
 
     /// Return all image layers. If recursive is false, only returns top-level layers.
@@ -542,7 +548,7 @@ public class SKTilemap: SKEffectNode, SKTiledObject {
     /// - parameter recursive: `Bool` include nested layers.
     /// - returns: `[SKImageLayer]` array of image layers.
     public func imageLayers(recursive: Bool = true) -> [SKImageLayer] {
-        return getLayers(recursive: recursive).sorted(by: { $0.index < $1.index }).filter { $0 as? SKImageLayer != nil } as! [SKImageLayer]
+        return getLayers(recursive: recursive).compactMap { $0 as? SKImageLayer }
     }
 
     /// Return all group layers. If recursive is false, only returns top-level layers.
@@ -550,13 +556,13 @@ public class SKTilemap: SKEffectNode, SKTiledObject {
     /// - parameter recursive: `Bool` include nested layers.
     /// - returns: `[SKGroupLayer]` array of image layers.
     public func groupLayers(recursive: Bool = true) -> [SKGroupLayer] {
-        return getLayers(recursive: recursive).sorted(by: { $0.index < $1.index }).filter { $0 as? SKGroupLayer != nil } as! [SKGroupLayer]
+        return getLayers(recursive: recursive).compactMap { $0 as? SKGroupLayer }
     }
 
 
     /// Convenience property to return all group layers.
     public var groupLayers: [SKGroupLayer] {
-        return layers.sorted(by: {$0.index < $1.index}).filter { $0 as? SKGroupLayer != nil } as! [SKGroupLayer]
+        return layers.compactMap { $0 as? SKGroupLayer }
     }
 
     /// Global antialiasing of lines
@@ -577,6 +583,10 @@ public class SKTilemap: SKEffectNode, SKTiledObject {
     override public var isPaused: Bool {
         willSet (pauseValue) {
             overlay.isHidden = (pauseValue == false)
+            // restart the frame clock so the paused interval isn't counted as animation time
+            if (pauseValue == false) {
+                lastUpdateTime = 0
+            }
         }
     }
 
@@ -683,7 +693,7 @@ public class SKTilemap: SKEffectNode, SKTiledObject {
         tileSize = CGSize.zero
         orientation = .orthogonal
         super.init(coder: aDecoder)
-        self.setupNotifications()
+        self.setupMapNode()
     }
 
     /// Initialize with dictionary attributes from xml parser.
@@ -742,9 +752,6 @@ public class SKTilemap: SKEffectNode, SKTiledObject {
         antialiasLines = (currentZoom < 1)
         super.init()
 
-        // turn off effects rendering by default
-        shouldEnableEffects = false
-
         // set the background color
         if let backgroundHexColor = attributes["backgroundcolor"] {
             if (ignoreBackground == false) {
@@ -756,38 +763,7 @@ public class SKTilemap: SKEffectNode, SKTiledObject {
             }
         }
 
-        // keep renderQuality within texture size limits
-        let renderSize = CGSize(width: size.width * tileSize.width, height: size.height * tileSize.height)
-        let largestPixelDimension: CGFloat = (renderSize.width > renderSize.height) ? renderSize.width : renderSize.height
-
-        // calculate the ideal max render quality (max size is 16384)
-        maxRenderQuality = CGFloat(Int(4000 / (largestPixelDimension * TiledGlobals.default.contentScale)))
-
-        let remainder = maxRenderQuality.truncatingRemainder(dividingBy: 2)
-        maxRenderQuality += remainder
-
-        // cap maximum render quality
-        maxRenderQuality = (TiledGlobals.default.renderQuality.override == 0) ? (maxRenderQuality > 16) ? 16 : maxRenderQuality : TiledGlobals.default.renderQuality.override
-
-        #if os(iOS)
-        renderQuality = maxRenderQuality / 4
-        #else
-        renderQuality = maxRenderQuality / 2
-        #endif
-
-        // cap render quality
-        renderQuality = (renderQuality > maxRenderQuality) ? maxRenderQuality : (renderQuality > 8) ? 8 : renderQuality
-
-
-        // debug node
-        self.debugNode = SKTiledDebugDrawNode(tileLayer: self.defaultLayer, isDefault: true)
-        self.debugNode.zPosition = zPosition + zDeltaForLayers
-        self.objectsOverlay.zPosition = zPosition + (zDeltaForLayers * 2)
-
-        addChild(debugNode)
-        addChild(objectsOverlay)
-
-        self.setupNotifications()
+        self.setupMapNode()
     }
 
     /// Initialize with map size/tile size
@@ -806,10 +782,54 @@ public class SKTilemap: SKEffectNode, SKTiledObject {
         self.orientation = orientation
         self.antialiasLines = (currentZoom < 1)
         super.init()
+        self.setupMapNode()
+    }
 
+    /// Setup shared by every initializer: render quality, tile storage, the debug node and the objects overlay.
+    private func setupMapNode() {
         // turn off effects rendering by default
         shouldEnableEffects = false
+
+        updateRenderQualityLimits()
+
+        // tile & object cache
+        dataStorage = TileDataStorage(map: self)
+
+        // debug node
+        self.debugNode = SKTiledDebugDrawNode(tileLayer: self.defaultLayer, isDefault: true)
+        self.debugNode.zPosition = zPosition + zDeltaForLayers
+        self.objectsOverlay.zPosition = zPosition + (zDeltaForLayers * 2)
+
+        addChild(debugNode)
+        addChild(objectsOverlay)
+
         self.setupNotifications()
+    }
+
+    /// Sets `maxRenderQuality` and `renderQuality` to keep rendered textures within size limits.
+    private func updateRenderQualityLimits() {
+        let renderSize = CGSize(width: size.width * tileSize.width, height: size.height * tileSize.height)
+        let largestPixelDimension: CGFloat = max(renderSize.width, renderSize.height)
+
+        // calculate the ideal max render quality (max size is 16384); an empty map gets the cap
+        var idealQuality: CGFloat = 16
+        if (largestPixelDimension > 0) {
+            idealQuality = CGFloat(Int(4000 / (largestPixelDimension * TiledGlobals.default.contentScale)))
+            idealQuality += idealQuality.truncatingRemainder(dividingBy: 2)
+        }
+
+        // cap maximum render quality; never below 1, which large maps would otherwise round down to 0
+        let qualityOverride = TiledGlobals.default.renderQuality.override
+        maxRenderQuality = (qualityOverride == 0) ? min(max(idealQuality, 1), 16) : qualityOverride
+
+        #if os(iOS)
+        let proposedQuality = maxRenderQuality / 4
+        #else
+        let proposedQuality = maxRenderQuality / 2
+        #endif
+
+        // cap render quality
+        renderQuality = min(max(proposedQuality, 1), maxRenderQuality, 8)
     }
 
 
@@ -908,7 +928,8 @@ public class SKTilemap: SKEffectNode, SKTiledObject {
     /// - parameter recursive: `Bool` include nested layers.
     /// - returns: `[SKTiledLayerObject]` array of layers.
     public func getLayers(recursive: Bool = true) -> [SKTiledLayerObject] {
-        return (recursive == true) ? self.layers : Array(self._layers)
+        guard (recursive == false) else { return self.layers }
+        return _layers.filter { $0 as? BackgroundLayer == nil }.sorted(by: { $0.index < $1.index })
     }
 
     /// Returns all content layers (ie. not groups). Sorted by zPosition in scene.
@@ -953,8 +974,12 @@ public class SKTilemap: SKEffectNode, SKTiledObject {
         let (success, inserted) = _layers.insert(layer)
 
         if (success == false) {
+            // the layer is already in the map; adding it as a child again would raise a SpriteKit exception
             Logger.default.log("could not add layer: \"\(inserted.layerName)\"", level: .error)
+            return (success, inserted)
         }
+
+        invalidateLayerCache()
 
         // add the layer as a child
         addChild(layer)
@@ -980,7 +1005,20 @@ public class SKTilemap: SKEffectNode, SKTiledObject {
     /// - parameter layer: `SKTiledLayerObject` layer object.
     /// - returns: `SKTiledLayerObject?` removed layer.
     public func removeLayer(_ layer: SKTiledLayerObject) -> SKTiledLayerObject? {
-        return _layers.remove(layer)
+        // nested layers belong to their group
+        if let group = layer.parent as? SKGroupLayer {
+            return group.removeLayer(layer)
+        }
+
+        guard let removed = _layers.remove(layer) else {
+            return nil
+        }
+        invalidateLayerCache()
+        removed.removeFromParent()
+
+        // stop updating the layer's tiles & objects
+        removed.removeFromDataStorage()
+        return removed
     }
 
     /// Create and add a new tile layer.
@@ -1033,12 +1071,7 @@ public class SKTilemap: SKEffectNode, SKTiledObject {
     /// - parameter layerName: `String` layer name.
     /// - returns: `[SKTiledLayerObject]` layer objects.
     public func getLayers(named layerName: String, recursive: Bool = true) -> [SKTiledLayerObject] {
-        var result: [SKTiledLayerObject] = []
-        let layersToCheck = self.getLayers(recursive: recursive)
-        if let index = layersToCheck.firstIndex(where: { $0.name == layerName }) {
-            result.append(layersToCheck[index])
-        }
-        return result
+        return getLayers(recursive: recursive).filter { $0.name == layerName }
     }
 
     /// Return layers with names matching the given prefix.
@@ -1047,12 +1080,7 @@ public class SKTilemap: SKEffectNode, SKTiledObject {
     /// - parameter recursive: `Bool` include nested layers.
     /// - returns: `[SKTiledLayerObject]` layer objects.
     public func getLayers(withPrefix: String, recursive: Bool = true) -> [SKTiledLayerObject] {
-        var result: [SKTiledLayerObject] = []
-        let layersToCheck = self.getLayers(recursive: recursive)
-        if let index = layersToCheck.firstIndex(where: { $0.layerName.hasPrefix(withPrefix) }) {
-            result.append(layersToCheck[index])
-        }
-        return result
+        return getLayers(recursive: recursive).filter { $0.layerName.hasPrefix(withPrefix) }
     }
 
     /// Return layers at the given path.
@@ -1060,11 +1088,7 @@ public class SKTilemap: SKEffectNode, SKTiledObject {
     /// - parameter atPath: `String` layer path.
     /// - returns: `[SKTiledLayerObject]` layer objects.
     public func getLayers(atPath: String) -> [SKTiledLayerObject] {
-        var result: [SKTiledLayerObject] = []
-        if let index = self.layers.firstIndex(where: { $0.path == atPath }) {
-            result.append(self.layers[index])
-        }
-        return result
+        return layers.filter { $0.path == atPath }
     }
 
     /// Returns a layer matching the given UUID.
@@ -1106,7 +1130,7 @@ public class SKTilemap: SKEffectNode, SKTiledObject {
     /// - parameter recursive: `Bool` include nested layers.
     /// - returns: `[SKTileLayer]` array of tile layers.
     public func tileLayers(named layerName: String, recursive: Bool = true) -> [SKTileLayer] {
-        return getLayers(recursive: recursive).filter { $0 as? SKTileLayer != nil }.filter { $0.name == layerName } as! [SKTileLayer]
+        return getLayers(recursive: recursive).compactMap { $0 as? SKTileLayer }.filter { $0.name == layerName }
     }
 
     /// Return tile layers with names matching the given prefix. If recursive is false, only returns top-level layers.
@@ -1115,7 +1139,7 @@ public class SKTilemap: SKEffectNode, SKTiledObject {
     /// - parameter recursive:  `Bool` include nested layers.
     /// - returns: `[SKTileLayer]` array of tile layers.
     public func tileLayers(withPrefix: String, recursive: Bool = true) -> [SKTileLayer] {
-        return getLayers(recursive: recursive).filter { $0 as? SKTileLayer != nil }.filter { $0.layerName.hasPrefix(withPrefix) } as! [SKTileLayer]
+        return getLayers(recursive: recursive).compactMap { $0 as? SKTileLayer }.filter { $0.layerName.hasPrefix(withPrefix) }
     }
 
     /// Returns a tile layer at the given index, otherwise, nil.
@@ -1136,7 +1160,7 @@ public class SKTilemap: SKEffectNode, SKTiledObject {
     /// - parameter recursive: `Bool` include nested layers.
     /// - returns: `[SKObjectGroup]` array of object groups.
     public func objectGroups(named layerName: String, recursive: Bool = true) -> [SKObjectGroup] {
-        return getLayers(recursive: recursive).filter { $0 as? SKObjectGroup != nil }.filter { $0.name == layerName } as! [SKObjectGroup]
+        return getLayers(recursive: recursive).compactMap { $0 as? SKObjectGroup }.filter { $0.name == layerName }
     }
 
     /// Return object groups with names matching the given prefix. If recursive is false, only returns top-level layers.
@@ -1145,7 +1169,7 @@ public class SKTilemap: SKEffectNode, SKTiledObject {
     /// - parameter recursive:  `Bool` include nested layers.
     /// - returns: `[SKObjectGroup]` array of object groups.
     public func objectGroups(withPrefix: String, recursive: Bool = true) -> [SKObjectGroup] {
-        return getLayers(recursive: recursive).filter { $0 as? SKObjectGroup != nil }.filter { $0.layerName.hasPrefix(withPrefix) } as! [SKObjectGroup]
+        return getLayers(recursive: recursive).compactMap { $0 as? SKObjectGroup }.filter { $0.layerName.hasPrefix(withPrefix) }
     }
 
     /// Returns an object group at the given index, otherwise, nil.
@@ -1166,7 +1190,7 @@ public class SKTilemap: SKEffectNode, SKTiledObject {
     /// - parameter recursive: `Bool` include nested layers.
     /// - returns: `[SKImageLayer]` array of image layers.
     public func imageLayers(named layerName: String, recursive: Bool = true) -> [SKImageLayer] {
-        return getLayers(recursive: recursive).filter { $0 as? SKImageLayer != nil }.filter { $0.name == layerName } as! [SKImageLayer]
+        return getLayers(recursive: recursive).compactMap { $0 as? SKImageLayer }.filter { $0.name == layerName }
     }
 
     /// Return image layers with names matching the given prefix. If recursive is false, only returns top-level layers.
@@ -1175,7 +1199,7 @@ public class SKTilemap: SKEffectNode, SKTiledObject {
     /// - parameter recursive:  `Bool` include nested layers.
     /// - returns: `[SKImageLayer]` array of image layers.
     public func imageLayers(withPrefix: String, recursive: Bool = true) -> [SKImageLayer] {
-        return getLayers(recursive: recursive).filter { $0 as? SKImageLayer != nil }.filter { $0.layerName.hasPrefix(withPrefix) } as! [SKImageLayer]
+        return getLayers(recursive: recursive).compactMap { $0 as? SKImageLayer }.filter { $0.layerName.hasPrefix(withPrefix) }
     }
 
     /// Returns an image layer at the given index, otherwise, nil.
@@ -1196,7 +1220,7 @@ public class SKTilemap: SKEffectNode, SKTiledObject {
     /// - parameter recursive: `Bool` include nested layers.
     /// - returns: `[SKGroupLayer]` array of group layers.
     public func groupLayers(named layerName: String, recursive: Bool = true) -> [SKGroupLayer] {
-        return getLayers(recursive: recursive).filter { $0 as? SKGroupLayer != nil }.filter { $0.name == layerName } as! [SKGroupLayer]
+        return getLayers(recursive: recursive).compactMap { $0 as? SKGroupLayer }.filter { $0.name == layerName }
     }
 
     /// Return group layers with names matching the given prefix. If recursive is false, only returns top-level layers.
@@ -1205,7 +1229,7 @@ public class SKTilemap: SKEffectNode, SKTiledObject {
     /// - parameter recursive:   `Bool` include nested layers.
     /// - returns: `[SKGroupLayer]` array of group layers.
     public func groupLayers(withPrefix: String, recursive: Bool = true) -> [SKGroupLayer] {
-        return getLayers(recursive: recursive).filter { $0 as? SKGroupLayer != nil }.filter { $0.layerName.hasPrefix(withPrefix) } as! [SKGroupLayer]
+        return getLayers(recursive: recursive).compactMap { $0 as? SKGroupLayer }.filter { $0.layerName.hasPrefix(withPrefix) }
     }
 
     /// Returns an group layer at the given index, otherwise, nil.
@@ -1315,9 +1339,7 @@ public class SKTilemap: SKEffectNode, SKTiledObject {
     /// - parameter point: `CGPoint` position in tilemap.
     /// - returns: `[SKTile]` array of tiles.
     public func tilesAt(point: CGPoint) -> [SKTile] {
-        return nodes(at: point).filter { node in
-            node as? SKTile != nil
-        } as! [SKTile]
+        return nodes(at: point).compactMap { $0 as? SKTile }
     }
 
     /// Return tiles at the given coordinate (all tile layers).
@@ -1428,7 +1450,7 @@ public class SKTilemap: SKEffectNode, SKTiledObject {
     /// - parameter gid: `Int` global tile id.
     /// - returns: `SKTilesetData` tile data, if it exists.
     public func getTileData(globalID gid: Int) -> SKTilesetData? {
-        let realID = flippedTileFlags(id: UInt32(gid)).gid
+        let realID = flippedTileFlags(id: UInt32(truncatingIfNeeded: gid)).gid
         for tileset in tilesets where tileset.contains(globalID: realID) {
             if let tileData = tileset.getTileData(globalID: Int(realID)) {
                 return tileData
@@ -1477,9 +1499,7 @@ public class SKTilemap: SKEffectNode, SKTiledObject {
     ///
     /// - returns: `[SKTileObject]` array of objects.
     public func objectsAt(point: CGPoint) -> [SKTileObject] {
-        return nodes(at: point).filter { node in
-            node as? SKTileObject != nil
-        } as! [SKTileObject]
+        return nodes(at: point).compactMap { $0 as? SKTileObject }
     }
 
     /// Return all of the current tile objects. If recursive is false, only returns objects from top-level layers.
@@ -1523,6 +1543,11 @@ public class SKTilemap: SKEffectNode, SKTiledObject {
     /// - returns: `SKTileObject?`
     public func getObject(withID id: Int) -> SKTileObject? {
         return objectGroups(recursive: true).compactMap { $0.getObject(withID: id) }.first
+    }
+
+    /// Returns an object id not used by any object in the map.
+    internal func nextObjectID() -> Int {
+        return (getObjects(recursive: true).map { $0.id }.max() ?? 0) + 1
     }
 
     /// Return object proxies.
@@ -1666,7 +1691,7 @@ public class SKTilemap: SKEffectNode, SKTiledObject {
         }
 
         // run animation actions
-        self.runAnimationAsActions(TiledGlobals.default.updateMode == TileUpdateMode.actions)
+        self.runAnimationAsActions(updateMode == TileUpdateMode.actions)
 
         // clamp the position of the map & parent nodes
         clampNodePosition(node: self, scale: TiledGlobals.default.contentScale)
@@ -1806,10 +1831,11 @@ public class SKTilemap: SKEffectNode, SKTiledObject {
             if (TiledGlobals.default.enableRenderCallbacks == true) {
                 renderStatistics.cpuPercentage = Int(cpuUsage())
                 // send render statistics back to the controller
-                self.postRenderStatistics(renderStart) {
-                    self.currentFrameIndex = 0
-                }
+                self.postRenderStatistics(renderStart)
             }
+
+            // sample again in `renderStatisticsSampleFrequency` frames
+            currentFrameIndex = 0
         }
 
         currentFrameIndex += 1
@@ -1894,22 +1920,26 @@ for animatedItem in dataStorage.animatedTileCache.enumerated() {
             // increment the current time value
             tileData.currentTime += (delta * abs(Double(self.speed)))
 
+            // wrap the current time into the animation cycle, keeping the remainder so frames don't drift
+            let cycleDuration = TimeInterval(cycleTime) / 1000
+            if (tileData.currentTime >= cycleDuration) {
+                tileData.currentTime = tileData.currentTime.truncatingRemainder(dividingBy: cycleDuration)
+            }
+
             // current time in ms
             let ct: Int = Int(tileData.currentTime * 1000)
 
             // current frame
-            var cf: UInt8? = nil
+            var cf: Int? = nil
 
             var aggregate = 0
 
             // get the frame at the current time
             for (idx, frame) in frames.enumerated() {
                 aggregate += frame.duration
-
-                if ct < aggregate  {
-                    if cf == nil {
-                        cf = UInt8(idx)
-                    }
+                if ct < aggregate {
+                    cf = idx
+                    break
                 }
             }
 
@@ -1921,16 +1951,13 @@ for animatedItem in dataStorage.animatedTileCache.enumerated() {
 
                 // stash the frame index
                 tileData.frameIndex = currentFrame
-                let frame = frames[Int(currentFrame)]
+                let frame = frames[currentFrame]
 
                 if let frameTexture = frame.texture {
                     // update frame texture
                     currentTexture = frameTexture
                 }
             }
-
-            // the the current time is greater than the animation cycle, reset current time to 0
-            if ct >= cycleTime { tileData.currentTime = 0 }
 
 
             // loop through tiles
@@ -2011,7 +2038,7 @@ extension TileUpdateMode {
 
 // MARK: - Extensions
 
-extension StaggerIndex: Hashable {
+extension StaggerIndex {
 
     init?(string value: String) {
         switch value {
@@ -2019,10 +2046,6 @@ extension StaggerIndex: Hashable {
             case "odd":  self = .odd
             default: return nil
         }
-    }
-
-    func hash(into hasher: inout Hasher) {
-        hasher.combine(self.rawValue)
     }
 }
 
@@ -2121,17 +2144,22 @@ extension SKTilemap {
         return !staggerX && Bool((y & 1) ^ hash)
     }
 
+    /// Stagger index as Tiled's 0 (odd) / 1 (even), used by the neighbour functions below.
+    private var staggerIndexValue: Int {
+        return (staggerEven == true) ? 1 : 0
+    }
+
     internal func topLeft(_ x: CGFloat, _ y: CGFloat) -> CGPoint {
         // if the value of y is odd & stagger index is odd
         if (staggerX == false) {
-            if Bool((Int(y) & 1) ^ staggerindex.hashValue) {
+            if Bool((Int(y) & 1) ^ staggerIndexValue) {
                 return CGPoint(x: x, y: y - 1)
             } else {
                 return CGPoint(x: x - 1, y: y - 1)
             }
         } else {
             // if the value of x is odd & stagger index is odd
-            if Bool((Int(x) & 1) ^ staggerindex.hashValue) {
+            if Bool((Int(x) & 1) ^ staggerIndexValue) {
                 return CGPoint(x: x - 1, y: y)
             } else {
                 return CGPoint(x: x - 1, y: y - 1)
@@ -2141,13 +2169,13 @@ extension SKTilemap {
 
     internal func topRight(_ x: CGFloat, _ y: CGFloat) -> CGPoint {
         if (staggerX == false) {
-            if Bool((Int(y) & 1) ^ staggerindex.hashValue) {
+            if Bool((Int(y) & 1) ^ staggerIndexValue) {
                 return CGPoint(x: x + 1, y: y - 1)
             } else {
                 return CGPoint(x: x, y: y - 1)
             }
         } else {
-            if Bool((Int(x) & 1) ^ staggerindex.hashValue) {
+            if Bool((Int(x) & 1) ^ staggerIndexValue) {
                 return CGPoint(x: x + 1, y: y)
             } else {
                 return CGPoint(x: x + 1, y: y - 1)
@@ -2157,13 +2185,13 @@ extension SKTilemap {
 
     internal func bottomLeft(_ x: CGFloat, _ y: CGFloat) -> CGPoint {
         if (staggerX == false) {
-            if Bool((Int(y) & 1) ^ staggerindex.hashValue) {
+            if Bool((Int(y) & 1) ^ staggerIndexValue) {
                 return CGPoint(x: x, y: y + 1)
             } else {
                 return CGPoint(x: x - 1, y: y + 1)
             }
         } else {
-            if Bool((Int(x) & 1) ^ staggerindex.hashValue) {
+            if Bool((Int(x) & 1) ^ staggerIndexValue) {
                 return CGPoint(x: x - 1, y: y + 1)
             } else {
                 return CGPoint(x: x - 1, y: y)
@@ -2173,13 +2201,13 @@ extension SKTilemap {
 
     internal func bottomRight(_ x: CGFloat, _ y: CGFloat) -> CGPoint {
         if (staggerX == false) {
-            if Bool((Int(y) & 1) ^ staggerindex.hashValue) {
+            if Bool((Int(y) & 1) ^ staggerIndexValue) {
                 return CGPoint(x: x + 1, y: y + 1)
             } else {
                 return CGPoint(x: x, y: y + 1)
             }
         } else {
-            if Bool((Int(x) & 1) ^ staggerindex.hashValue) {
+            if Bool((Int(x) & 1) ^ staggerIndexValue) {
                 return CGPoint(x: x + 1, y: y + 1)
             } else {
                 return CGPoint(x: x + 1, y: y)

@@ -110,7 +110,7 @@ internal class AnchorNode: SKNode {
         nameLabel.position.x += scaledOffsetX
         nameLabel.position.y += scaledOffsetY
         nameLabel.setScale(1.0 / scaledRenderQuality)
-        nameLabel.color = .white
+        nameLabel.fontColor = .white
     }
 }
 

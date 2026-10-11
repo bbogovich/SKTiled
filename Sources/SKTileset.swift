@@ -107,19 +107,19 @@ public class SKTileset: NSObject, SKTiledObject {
     /// Tile offset value.
     public var firstGID: Int = 0
 
-    /// Returns the last global tile id in the tileset.
+    /// Returns the last global tile id in the tileset (`firstGID` if the tileset has no tile data).
     public var lastGID: Int {
-        return tileData.map { $0.id }.max() ?? firstGID
+        return firstGID + (maxLocalID ?? 0)
     }
 
-    /// Returns a range of localized tile ids.
+    /// Returns a range of localized tile ids (`0...0` if the tileset has no tile data).
     public var localRange: ClosedRange<Int> {
-        return 0...(dataCount - 1)
+        return 0...(maxLocalID ?? 0)
     }
 
-    /// Returns a range of global tile id values.
+    /// Returns a range of global tile id values (`firstGID...firstGID` if the tileset has no tile data).
     public var globalRange: ClosedRange<Int> {
-        return firstGID...(firstGID + lastGID)
+        return firstGID...lastGID
     }
 
     // MARK: - Spacing
@@ -136,8 +136,22 @@ public class SKTileset: NSObject, SKTiledObject {
     /// Texture name (if created from source)
     public var source: String!
 
-    /// Tile data set.
-    private var tileData: Set<SKTilesetData> = []
+    /// Tile data, keyed by local id.
+    private var tileDataByID: [Int: SKTilesetData] = [:]
+
+    /// Highest local id with tile data, or `nil` if the tileset has no tile data.
+    private var maxLocalID: Int?
+
+    /// All tile data.
+    private var tileData: Dictionary<Int, SKTilesetData>.Values {
+        return tileDataByID.values
+    }
+
+    /// Stores tile data under its local id.
+    private func insertTileData(_ data: SKTilesetData) {
+        tileDataByID[data.id] = data
+        maxLocalID = max(maxLocalID ?? data.id, data.id)
+    }
 
     /// Indicates the tileset is a collection of images.
     public var isImageCollection: Bool = false
@@ -223,7 +237,8 @@ public class SKTileset: NSObject, SKTiledObject {
         // name, width and height are required
         guard let setName = attributes["name"],
               let width = attributes["tilewidth"].flatMap({ Int($0) }),
-              let height = attributes["tileheight"].flatMap({ Int($0) }) else {
+              let height = attributes["tileheight"].flatMap({ Int($0) }),
+              width > 0, height > 0 else {
             return nil
         }
 
@@ -343,11 +358,18 @@ public class SKTileset: NSObject, SKTiledObject {
 
         let textureWidth = Int(sourceTexture.size().width)
         let textureHeight = Int(sourceTexture.size().height)
+        let tileWidth = Int(tileSize.width)
+        let tileHeight = Int(tileSize.height)
+
+        guard tileWidth > 0, tileHeight > 0, textureWidth > 0, textureHeight > 0 else {
+            self.log("cannot slice spritesheet \"\(source.url.lastPathComponent)\": tile size \(tileWidth)x\(tileHeight), image size \(textureWidth)x\(textureHeight).", level: .error)
+            return
+        }
 
         // calculate the number of tiles in the texture
         let marginReal = margin * 2
-        let rowTileCount = (textureHeight - marginReal + spacing) / (Int(tileSize.height) + spacing)  // number of tiles (height)
-        let colTileCount = (textureWidth - marginReal + spacing) / (Int(tileSize.width) + spacing)    // number of tiles (width)
+        let rowTileCount = max(0, (textureHeight - marginReal + spacing) / (tileHeight + spacing))  // number of tiles (height)
+        let colTileCount = max(0, (textureWidth - marginReal + spacing) / (tileWidth + spacing))    // number of tiles (width)
 
         // set columns property
         if columns == 0 {
@@ -358,27 +380,21 @@ public class SKTileset: NSObject, SKTiledObject {
         let totalTileCount = colTileCount * rowTileCount
         tilecount = tilecount > 0 ? tilecount : totalTileCount
 
-        let rowHeight = Int(tileSize.height) * rowTileCount     // row height (minus spacing)
-        let rowSpacing = spacing * (rowTileCount - 1)           // actual row spacing
-
-        // initial x/y coordinates
-        var x = margin
-
-        let usableHeight = margin + rowHeight + rowSpacing
-        let tileSizeHeight = Int(tileSize.height)
-        let heightDifference = textureHeight - usableHeight
-
-        // invert the y-coord
-        var y = (usableHeight - tileSizeHeight) + heightDifference
+        let rectWidth = self.tileSize.width / CGFloat(textureWidth)
+        let rectHeight = self.tileSize.height / CGFloat(textureHeight)
 
         var tilesAdded: Int = 0
 
         for tileID in 0..<totalTileCount {
+            let col = tileID % colTileCount
+            let row = tileID / colTileCount
+
+            // texture rects are y-up: row 0 is at the top of the image, below the top margin
+            let x = margin + col * (tileWidth + spacing)
+            let y = textureHeight - margin - tileHeight - row * (tileHeight + spacing)
+
             let rectStartX = CGFloat(x) / CGFloat(textureWidth)
             let rectStartY = CGFloat(y) / CGFloat(textureHeight)
-
-            let rectWidth = self.tileSize.width / CGFloat(textureWidth)
-            let rectHeight = self.tileSize.height / CGFloat(textureHeight)
 
             // create texture rectangle
             let tileRect = CGRect(x: rectStartX, y: rectStartY, width: rectWidth, height: rectHeight)
@@ -390,12 +406,6 @@ public class SKTileset: NSObject, SKTiledObject {
                 _ = self.addTilesetTile(tileID, texture: tileTexture)
             } else {
                 _ = self.setDataTexture(tileID, texture: tileTexture)
-            }
-
-            x += Int(self.tileSize.width) + self.spacing
-            if x >= textureWidth {
-                x = self.margin
-                y -= Int(self.tileSize.height) + self.spacing
             }
 
             tilesAdded += 1
@@ -426,7 +436,7 @@ public class SKTileset: NSObject, SKTiledObject {
     /// - parameter texture: `SKTexture` texture for tile at the given id.
     /// - returns: `SKTilesetData?` tileset data (or nil if the data exists).
     public func addTilesetTile(_ tileID: Int, texture: SKTexture) -> SKTilesetData? {
-        guard !(self.tileData.contains(where: { $0.hashValue == tileID.hashValue })) else {
+        guard tileDataByID[tileID] == nil else {
             log("tile data exists at id: \(tileID)", level: .error)
             return nil
         }
@@ -437,7 +447,7 @@ public class SKTileset: NSObject, SKTiledObject {
         // add to tile cache
 
         data.ignoreProperties = ignoreProperties
-        self.tileData.insert(data)
+        insertTileData(data)
         data.parseProperties(completion: nil)
         return data
     }
@@ -462,7 +472,7 @@ public class SKTileset: NSObject, SKTiledObject {
     ///   - source: image path or name, recorded as the tile's `source`.
     /// - Returns: new tile data, or `nil` if the id is already in use.
     public func addTilesetTile(_ tileID: Int, image: CGImage, source: String) -> SKTilesetData? {
-        guard !(self.tileData.contains(where: { $0.hashValue == tileID.hashValue })) else {
+        guard tileDataByID[tileID] == nil else {
             log("tile data exists at id: \(tileID)", level: .error)
             return nil
         }
@@ -479,7 +489,7 @@ public class SKTileset: NSObject, SKTiledObject {
         
         // add the image name to the source attribute
         data.source = source
-        self.tileData.insert(data)
+        insertTileData(data)
         data.parseProperties(completion: nil)
         return data
     }
@@ -537,7 +547,7 @@ public class SKTileset: NSObject, SKTiledObject {
     /// - parameter localID:  `UInt32` local tile id.
     /// - returns: `Bool` tileset contains the local id.
     internal func contains(localID: UInt32) -> Bool {
-        return localRange ~= Int(localID)
+        return (maxLocalID != nil) && (localRange ~= Int(localID))
     }
 
     /// Returns true if the tileset contains the global ID.
@@ -545,7 +555,7 @@ public class SKTileset: NSObject, SKTiledObject {
     /// - parameter gid:  `UInt32` global tile id.
     /// - returns: `Bool` tileset contains the global id.
     public func contains(globalID gid: UInt32) -> Bool {
-        return globalRange ~= Int(gid)
+        return (maxLocalID != nil) && (globalRange ~= Int(gid))
     }
 
     /// Returns tile data for the given global tile ID.
@@ -558,10 +568,7 @@ public class SKTileset: NSObject, SKTiledObject {
         // parse out flipped flags
         var id = rawTileID(id: gid)
         id = getLocalID(forGlobalID: id)
-        if let index = tileData.firstIndex(where: { $0.id == id }) {
-            return tileData[index]
-        }
-        return nil
+        return tileDataByID[id]
     }
 
     /// Returns tile data for the given local tile ID.
@@ -570,10 +577,7 @@ public class SKTileset: NSObject, SKTiledObject {
     /// - returns: `SKTilesetData?` tile data object.
     public func getTileData(localID id: Int) -> SKTilesetData? {
         let localID = rawTileID(id: id)
-        if let index = tileData.firstIndex(where: { $0.id == localID }) {
-            return tileData[index]
-        }
-        return nil
+        return tileDataByID[localID]
     }
 
     /// Returns tile data with the given property.
@@ -637,13 +641,12 @@ public class SKTileset: NSObject, SKTiledObject {
         return (id < 0) ? gid : id
     }
 
-    /// Convert a global ID to the tileset's local ID.
+    /// Convert a local ID to a global ID (the same value as `SKTilesetData.globalID`).
     ///
     /// - parameter id: `Int` local id.
     /// - returns: `Int` global tile ID.
     public func getGlobalID(forLocalID id: Int) -> Int {
-        let gid = (firstGID > 0) ? (firstGID + id) - 1 : id
-        return gid
+        return firstGID + id
     }
 
     /// Check for tile ID flip flags.
@@ -696,17 +699,17 @@ public class SKTileset: NSObject, SKTiledObject {
 
 
 
+/// Tilesets are compared by identity: two tilesets with the same name are still different tilesets.
 public func == (lhs: SKTileset, rhs: SKTileset) -> Bool {
-    return (lhs.hash == rhs.hash)
+    return lhs === rhs
 }
 
 
 extension SKTileset {
 
+    /// Identity hash, consistent with `NSObject.isEqual` (identity) and safe to call off the main actor.
     nonisolated override public var hash: Int {
-        MainActor.assumeIsolated {
-            return name.hashValue
-        }
+        return ObjectIdentifier(self).hashValue
     }
 
     /// String representation of the tileset object.

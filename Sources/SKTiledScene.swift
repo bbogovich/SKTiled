@@ -142,6 +142,11 @@ open class SKTiledScene: SKScene, SKPhysicsContactDelegate, SKTiledSceneDelegate
             cameraNode.addDelegate(self)
             addChild(cameraNode)
             camera = cameraNode
+        } else {
+            #if os(iOS)
+            // gestures were removed when the scene left its previous view
+            cameraNode.setupGestures(for: view)
+            #endif
         }
 
         // a map set up before the scene was presented
@@ -149,7 +154,17 @@ open class SKTiledScene: SKScene, SKPhysicsContactDelegate, SKTiledSceneDelegate
             configureCamera(for: tilemap)
         }
     }
-    
+
+    /// Called when the scene is about to be removed from its view.
+    ///
+    /// - Parameter view: parent view.
+    override open func willMove(from view: SKView) {
+        #if os(iOS)
+        // the camera's recognizers would otherwise stay attached to the view
+        cameraNode?.removeGestures()
+        #endif
+    }
+
     // MARK: - Setup
 
     /// Loads a TMX file and makes it the scene's map, replacing the current one.
@@ -215,6 +230,11 @@ open class SKTiledScene: SKScene, SKPhysicsContactDelegate, SKTiledSceneDelegate
         if let current = self.tilemap {
             cameraNode?.removeDelegate(current)
             current.removeFromParent()
+
+            // navigation graphs belong to the map being replaced
+            if (current !== tilemap) {
+                graphs.removeAll()
+            }
         }
 
         backgroundColor = tilemap.backgroundColor ?? SKColor.clear
@@ -240,7 +260,7 @@ open class SKTiledScene: SKScene, SKPhysicsContactDelegate, SKTiledSceneDelegate
         // camera properties inherited from tilemap
         cameraNode.allowMovement = tilemap.allowMovement
         cameraNode.allowZoom = tilemap.allowZoom
-        cameraNode.maxZoom = tilemap.zoomConstraints.max
+        cameraNode.setZoomConstraints(minimum: tilemap.zoomConstraints.min, maximum: tilemap.zoomConstraints.max)
 
         // initial zoom level
         if tilemap.autoResize, let view = view {

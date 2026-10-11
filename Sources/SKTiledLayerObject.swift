@@ -117,7 +117,13 @@ public class SKTiledLayerObject: SKEffectNode, SKTiledObject {
     public var type: String!
     
     /// Layer index. Matches the index of the layer in the source TMX file.
-    public var index: Int = 0
+    public var index: Int = 0 {
+        didSet {
+            guard oldValue != index else { return }
+            // layer order depends on the index
+            tilemap?.invalidateLayerCache()
+        }
+    }
     
     /// Logging verbosity.
     internal var loggingLevel: LoggingLevel = TiledGlobals.default.loggingLevel
@@ -720,13 +726,13 @@ public class SKTiledLayerObject: SKEffectNode, SKTiledObject {
                 var referencePoint = CGPoint(x: floor(pixelX / tileWidth), y: floor(pixelY / tileHeight))
                 
                 // relative x & y position to grid aligned tile
-                var relativePoint = CGPoint(x: pixelX - referencePoint.x * tileWidth,
+                let relativePoint = CGPoint(x: pixelX - referencePoint.x * tileWidth,
                                             y: pixelY - referencePoint.y * tileHeight)
                 
                 
-                // make adjustments to reference point
+                // make adjustments to reference point (the stagger axis index doubles)
                 if tilemap.staggerX {
-                    relativePoint.x *= 2
+                    referencePoint.x *= 2
                     if tilemap.staggerEven {
                         referencePoint.x += 1
                     }
@@ -873,16 +879,28 @@ public class SKTiledLayerObject: SKEffectNode, SKTiledObject {
     ///
     /// - parameter node:      `SKNode` object.
     /// - parameter coord:     `CGPoint` tile coordinate.
-    /// - parameter offset:    `CGPoint` offset amount.
+    /// - parameter offset:    `CGPoint` offset amount, in map space (positive y is down, as in Tiled).
     /// - parameter zpos: `CGFloat?` optional z-position.
     public func addChild(_ node: SKNode, coord: CGPoint, offset: CGPoint = CGPoint.zero, zpos: CGFloat? = nil) {
         addChild(node)
-        node.position = pointForCoordinate(coord: coord, offsetX: offset.y, offsetY: offset.y)
-        node.position.x += offset.x
-        node.position.y += offset.y
+        node.position = pointForCoordinate(coord: coord, offsetX: offset.x, offsetY: offset.y)
         node.zPosition = (zpos != nil) ? zpos! : zPosition + tilemap.zDeltaForLayers
     }
     
+    /// Removes the tiles & objects of this layer (and its child layers) from the map's tile storage,
+    /// so they are no longer updated or retained once the layer leaves the map.
+    internal func removeFromDataStorage() {
+        guard let dataStorage = tilemap?.dataStorage else { return }
+        for layer in self.layers {
+            if let tileLayer = layer as? SKTileLayer {
+                tileLayer.removeTilesFromDataStorage(tileLayer.getTiles())
+            }
+            if let objectGroup = layer as? SKObjectGroup {
+                objectGroup.getObjects().forEach { dataStorage.objectRemoved($0) }
+            }
+        }
+    }
+
     /// Prune tiles out of the camera bounds.
     ///
     /// - parameter outsideOf: `CGRect` camera bounds.

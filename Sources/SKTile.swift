@@ -81,10 +81,19 @@ open class SKTile: SKSpriteNode {
     open var tileSize: CGSize
 
     /// Animation frame index
-    private var frameIndex: UInt8 = 0
+    private var frameIndex: Int = 0
 
     /// Tileset tile data.
     open var tileData: SKTilesetData
+
+    /// Tile is flipped horizontally. Flip flags belong to each tile, since many tiles share one tile data.
+    open var flipHoriz: Bool = false
+
+    /// Tile is flipped vertically.
+    open var flipVert: Bool = false
+
+    /// Tile is flipped diagonally.
+    open var flipDiag: Bool = false
 
     /// Weak reference to the parent layer.
     weak open var layer: SKTileLayer!
@@ -137,8 +146,9 @@ open class SKTile: SKSpriteNode {
     }
 
     // Overlap
-    fileprivate var tileOverlap: CGFloat = 1.0                      // tile overlap amount
+    fileprivate var tileOverlap: CGFloat = 0                        // tile overlap amount, in pixels
     fileprivate var maxOverlap: CGFloat = 3.0                       // maximum tile overlap
+    internal private(set) var overlapScale: CGSize = CGSize(width: 1, height: 1)  // scale currently applied for overlap
 
     // Update values
     private var currentTime : TimeInterval = 0
@@ -212,6 +222,9 @@ open class SKTile: SKSpriteNode {
         self.tileData = data
         self.animationKey += "-\(data.globalID)"
         self.tileSize = tileset.tileSize
+        self.flipHoriz = data.flipHoriz
+        self.flipVert = data.flipVert
+        self.flipDiag = data.flipDiag
         super.init(texture: data.texture, color: SKColor.clear, size: fabs(tileset.tileSize))
 
         // get render mode from tile data properties
@@ -257,9 +270,10 @@ open class SKTile: SKSpriteNode {
     /// - parameter texture: `SKTexture?` tile texture.
     /// - returns: `SKTile` tile sprite.
     public init(texture: SKTexture?) {
-        // create empty tileset data
+        // tile data holds the texture, so updates & redraws keep it
         tileData = SKTilesetData()
-        tileSize = CGSize.zero
+        tileData.texture = texture
+        tileSize = texture?.size() ?? CGSize.zero
         super.init(texture: texture, color: SKColor.clear, size: tileSize)
         colorBlendFactor = 0
     }
@@ -400,17 +414,25 @@ open class SKTile: SKSpriteNode {
         var overlapValue = overlap <= maxOverlap ? overlap : maxOverlap
         overlapValue = overlapValue > 0 ? overlapValue : 0
         guard overlapValue != tileOverlap else { return }
-        guard let tileTexture = tileData.texture else { return }
+        tileOverlap = overlapValue
 
-        let width: CGFloat = tileTexture.size().width
-        let overlapWidth = width + (overlap / width)
+        // replace the overlap scale already applied, rather than compounding it
+        let newScale = overlapScaleForCurrentTexture()
+        xScale *= newScale.width / overlapScale.width
+        yScale *= newScale.height / overlapScale.height
+        overlapScale = newScale
+    }
 
-        let height: CGFloat = tileTexture.size().height
-        let overlapHeight = height + (overlap / height)
-
-        xScale *= overlapWidth / width
-        yScale *= overlapHeight / height
-        tileOverlap = overlap
+    /// Returns the scale that grows the tile texture by the overlap amount: `(size + overlap) / size`.
+    ///
+    /// - returns: `CGSize` horizontal & vertical scale.
+    private func overlapScaleForCurrentTexture() -> CGSize {
+        let identity = CGSize(width: 1, height: 1)
+        guard (tileOverlap > 0), let tileTexture = tileData.texture ?? texture else { return identity }
+        let textureSize = tileTexture.size()
+        guard (textureSize.width > 0) && (textureSize.height > 0) else { return identity }
+        return CGSize(width: (textureSize.width + tileOverlap) / textureSize.width,
+                      height: (textureSize.height + tileOverlap) / textureSize.height)
     }
 
     /// Orient the tile based on the current flip flags.
@@ -419,8 +441,9 @@ open class SKTile: SKSpriteNode {
         zRotation = 0
         setScale(1)
 
-        // get the map offset
-        let mapOffset = tileData.tileset.mapOffset
+        // get the map offset (tiles created without tile data have no tileset)
+        let tileset: SKTileset? = tileData.tileset
+        let mapOffset = tileset?.mapOffset ?? CGPoint.zero
 
         // map tile size
         let mapTileSize = CGSize(width: tileSize.width - mapOffset.x, height: tileSize.height - mapOffset.y)
@@ -428,38 +451,38 @@ open class SKTile: SKSpriteNode {
         let mapTileSizeHalfHeight: CGFloat = mapTileSize.height / 2
 
         // tileset tile size
-        let tilesetTileSize: CGSize = tileData.tileset.tileSize
+        let tilesetTileSize: CGSize = tileset?.tileSize ?? tileSize
         let tilesetTileWidth: CGFloat = tilesetTileSize.width
         let tilesetTileHeight: CGFloat = tilesetTileSize.height
 
         // new values
         var newZRotation: CGFloat = 0
-        var newXScale: CGFloat = xScale
-        var newYScale: CGFloat = yScale
+        var newXScale: CGFloat = 1
+        var newYScale: CGFloat = 1
 
-        if (tileData.flipDiag) {
+        if (flipDiag) {
 
             // rotate 90 (d, h)
-            if (tileData.flipHoriz && !tileData.flipVert) {
+            if (flipHoriz && !flipVert) {
                 newZRotation = CGFloat(-Double.pi / 2)    // rotate 90deg
                 alignment = .bottomRight
             }
 
             // rotate right, flip vertically  (d, h, v)
-            if (tileData.flipHoriz && tileData.flipVert) {
+            if (flipHoriz && flipVert) {
                 newZRotation = CGFloat(-Double.pi / 2)    // rotate 90deg
                 newXScale *= -1                           // flip horizontally
                 alignment = .bottomLeft
             }
 
             // rotate -90 (d, v)
-            if (!tileData.flipHoriz && tileData.flipVert) {
+            if (!flipHoriz && flipVert) {
                 newZRotation = CGFloat(Double.pi / 2)     // rotate -90deg
                 alignment = .topLeft
             }
 
             // rotate right, flip horiz (d)
-            if (!tileData.flipHoriz && !tileData.flipVert) {
+            if (!flipHoriz && !flipVert) {
                 newZRotation = CGFloat(Double.pi / 2)     // rotate -90deg
                 newXScale *= -1                           // flip horizontally
                 alignment = .topRight
@@ -469,15 +492,15 @@ open class SKTile: SKSpriteNode {
             // reset to default
             alignment = .bottomLeft
 
-            if (tileData.flipHoriz == true) {
+            if (flipHoriz == true) {
                 newXScale *= -1
-                alignment = (tileData.flipVert == true) ? .topRight : .bottomRight
+                alignment = (flipVert == true) ? .topRight : .bottomRight
             }
 
             // (v)
-            if (tileData.flipVert == true) {
+            if (flipVert == true) {
                 newYScale *= -1
-                alignment = (tileData.flipHoriz == true) ? .topRight : .topLeft
+                alignment = (flipHoriz == true) ? .topRight : .topLeft
             }
         }
 
@@ -509,9 +532,11 @@ open class SKTile: SKSpriteNode {
 
         // if this is a tile object, the anchor point should be
         if (isTileObject == false) {
-            // set the anchor point
-            anchorPoint.x = xAnchor
-            anchorPoint.y = yAnchor
+            // set the anchor point (a tile without a size has none to compute)
+            if (tilesetTileWidth > 0) && (tilesetTileHeight > 0) {
+                anchorPoint.x = xAnchor
+                anchorPoint.y = yAnchor
+            }
         } else {
             alignment = .center
             newYScale = newYScale * -1
@@ -522,8 +547,10 @@ open class SKTile: SKSpriteNode {
         // rotate the sprite
         zRotation = newZRotation
 
-        xScale = newXScale
-        yScale = newYScale
+        // flip, then grow by the overlap amount
+        overlapScale = overlapScaleForCurrentTexture()
+        xScale = newXScale * overlapScale.width
+        yScale = newYScale * overlapScale.height
     }
 
     // MARK: - Geometry
@@ -616,13 +643,14 @@ open class SKTile: SKSpriteNode {
 
         // default line width
         let defaultLineWidth: CGFloat = 1
-        let mapOffset = tileData.tileset.mapOffset
+        let tileset: SKTileset? = tileData.tileset
+        let mapOffset = tileset?.mapOffset ?? CGPoint.zero
 
         // map tile size
         let mapTileSize = CGSize(width: tileSize.width - mapOffset.x, height: tileSize.height - mapOffset.y)
 
         // tileset tile size
-        let tilesetTileSize: CGSize = tileData.tileset.tileSize
+        let tilesetTileSize: CGSize = tileset?.tileSize ?? tileSize
         let tilesetTileHeight: CGFloat = tilesetTileSize.height
 
         // calculate the offset
@@ -667,7 +695,8 @@ open class SKTile: SKSpriteNode {
         let shapeZPos = zPosition + 50
 
         // draw the path
-        bounds.isAntialiased = layer.antialiased
+        let antialiased = layer?.antialiased ?? bounds.isAntialiased
+        bounds.isAntialiased = antialiased
         bounds.lineCap = .round
         bounds.lineJoin = .miter
         bounds.miterLimit = 0
@@ -681,7 +710,7 @@ open class SKTile: SKSpriteNode {
         addChild(bounds)
 
         // anchor point
-        let tileHeight = (layer != nil) ? layer.tilemap.tileHeight : tileSize.height
+        let tileHeight = layer?.tilemap?.tileHeight ?? tileSize.height
         let tileHeightDivisor = (tileHeight <= 16) ? 8 : 16
         let anchorRadius: CGFloat = ((tileHeight / 2) / tileHeightDivisor) * renderQuality
         let anchor = SKShapeNode(circleOfRadius: anchorRadius)
@@ -691,7 +720,7 @@ open class SKTile: SKSpriteNode {
         anchor.fillColor = bounds.strokeColor
         anchor.strokeColor = SKColor.clear
         anchor.zPosition = shapeZPos
-        anchor.isAntialiased = layer.antialiased
+        anchor.isAntialiased = antialiased
 
 
         // first point
@@ -703,7 +732,7 @@ open class SKTile: SKSpriteNode {
         pointShape.fillColor = bounds.strokeColor
         pointShape.strokeColor = SKColor.clear
         pointShape.zPosition = shapeZPos * 15
-        pointShape.isAntialiased = layer.antialiased
+        pointShape.isAntialiased = antialiased
 
         pointShape.position = firstPoint
         bounds.setScale(1 / renderQuality)
@@ -711,9 +740,7 @@ open class SKTile: SKSpriteNode {
 
         if (duration > 0) {
             let fadeAction = SKAction.fadeAfter(wait: duration, alpha: 0)
-            bounds.run(fadeAction, withKey: "FADEOUT_ACTION", completion: {
-                bounds.removeFromParent()
-            })
+            bounds.run(SKAction.sequence([fadeAction, SKAction.removeFromParent()]), withKey: "FADEOUT_ACTION")
         }
     }
 
@@ -727,12 +754,12 @@ open class SKTile: SKSpriteNode {
         // update texture for static frames
         if (tileData.isAnimated == false) {
 
-            // check texture is the tile data texture
-            if (self.texture != tileData.texture) {
+            // check texture is the tile data texture; tiles created from a texture keep their own
+            if let dataTexture = tileData.texture, (self.texture != dataTexture) {
 
                 // reset tile texture & size
-                self.texture = tileData.texture
-                self.size = tileData.texture.size()
+                self.texture = dataTexture
+                self.size = dataTexture.size()
                 //self.log("updating static tile id: \(tileData.id)", level: .debug)
             }
             return
@@ -752,7 +779,7 @@ open class SKTile: SKSpriteNode {
         let ct: Int = Int(currentTime * 1000)
 
         // current frame
-        var cf: UInt8? = nil
+        var cf: Int? = nil
 
         var aggregate = 0
 
@@ -761,9 +788,8 @@ open class SKTile: SKSpriteNode {
             aggregate += frame.duration
 
             if ct < aggregate {
-                if cf == nil {
-                    cf = UInt8(idx)
-                }
+                cf = idx
+                break
             }
         }
 
@@ -772,7 +798,7 @@ open class SKTile: SKSpriteNode {
 
             // stash the frame index
             frameIndex = currentFrame
-            let frame = frames[Int(currentFrame)]
+            let frame = frames[currentFrame]
             if let frameTexture = frame.texture {
 
                 // update sprite size
@@ -782,8 +808,10 @@ open class SKTile: SKSpriteNode {
             }
         }
 
-        // the the current time is greater than the animation cycle, reset current time to 0
-        if ct >= cycleTime { currentTime = 0 }
+        // the current time is past the animation cycle: wrap it, keeping the time past the cycle end
+        if ct >= cycleTime {
+            currentTime = currentTime.truncatingRemainder(dividingBy: Double(cycleTime) / 1000)
+        }
     }
 }
 
@@ -795,7 +823,13 @@ extension TileRenderMode: RawRepresentable {
 
     public typealias RawValue = Int
 
+    /// Offset for `animated` global ids that would collide with the other cases' raw values.
+    private static let animatedGIDOffset = 4
+
     /// Initialize with an integer value.
+    ///
+    /// Values above 2 are `animated` global ids, as in a `renderMode` tile property. Global ids of 2 or
+    /// less are stored as `gid - 4` (values below -1), so every case round-trips through `rawValue`.
     ///
     /// - Parameter rawValue: raw integer.
     public init?(rawValue: RawValue) {
@@ -804,6 +838,7 @@ extension TileRenderMode: RawRepresentable {
             case 1: self = .static
             case 2: self = .ignore
             case -1: self = .animated(gid: nil)
+            case ..<(-1): self = .animated(gid: rawValue &+ TileRenderMode.animatedGIDOffset)
             default: self = .animated(gid: rawValue)
         }
     }
@@ -814,7 +849,8 @@ extension TileRenderMode: RawRepresentable {
             case .static: return 1
             case .ignore: return 2
             case .animated(let gid):
-                return gid ?? -1
+                guard let gid = gid else { return -1 }
+                return (gid > 2) ? gid : gid &- TileRenderMode.animatedGIDOffset
         }
     }
 }
@@ -917,9 +953,7 @@ extension SKTile {
 
                 if (highlightDuration > 0) {
                     let fadeAction = SKAction.fadeOut(withDuration: highlightDuration)
-                    frameShape.run(fadeAction, completion: {
-                        frameShape.removeFromParent()
-                    })
+                    frameShape.run(SKAction.sequence([fadeAction, SKAction.removeFromParent()]))
                 }
             }
         }
@@ -953,13 +987,14 @@ extension SKTile {
         var xOffset: CGFloat = 0
         var yOffset: CGFloat = 0
 
-        let mapOffset = tileData.tileset.mapOffset
+        let tileset: SKTileset? = tileData.tileset
+        let mapOffset = tileset?.mapOffset ?? CGPoint.zero
 
         // map tile size
         let mapTileSize = CGSize(width: tileSize.width - mapOffset.x, height: tileSize.height - mapOffset.y)
 
         // tileset tile size
-        let tilesetTileSize: CGSize = tileData.tileset.tileSize
+        let tilesetTileSize: CGSize = tileset?.tileSize ?? tileSize
         let tilesetTileHeight: CGFloat = tilesetTileSize.height
 
 

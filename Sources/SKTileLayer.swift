@@ -128,13 +128,6 @@ public class SKTileLayer: SKTiledLayerObject {
         }
     }
     
-    override public var speed: CGFloat {
-        didSet {
-            guard oldValue != speed else { return }
-            self.getTiles().forEach { $0.speed = speed }
-        }
-    }
-    
     // MARK: - Init
     /// Initialize with layer name and parent `SKTilemap`.
     ///
@@ -302,10 +295,7 @@ public class SKTileLayer: SKTiledLayerObject {
     
     /// Clear the layer of tiles.
     public func clearLayer() {
-        self.tiles.forEach { tile in
-            tile?.removeFromParent()
-        }
-        self.tiles = TilesArray(columns: Int(tilemap.size.width), rows: Int(tilemap.size.height))
+        clearTiles()
     }
     
     /// Build an empty tile at the given coordinates. Returns an existing tile if one already exists,
@@ -326,7 +316,9 @@ public class SKTileLayer: SKTiledLayerObject {
         // remove the current tile
         let existingTile = removeTileAt(coord: coord)
         
-        let tileData: SKTilesetData? = (gid != nil) ? getTileData(globalID: gid!) : nil
+        // strip any flip flags from the gid
+        let tileAttrs = gid.map { flippedTileFlags(id: UInt32(truncatingIfNeeded: $0)) }
+        let tileData: SKTilesetData? = tileAttrs.flatMap { getTileData(globalID: Int($0.gid)) }
         
         let Tile = (tilemap.delegate != nil) ? tilemap.delegate!.objectForTileType(named: tileType) : SKTile.self
         let tile = Tile.init()
@@ -337,6 +329,12 @@ public class SKTileLayer: SKTiledLayerObject {
             tile.texture = tileData.texture
             tile.tileSize = (tileData.tileset != nil) ? tileData.tileset!.tileSize : self.tileSize
         }
+
+        if let tileAttrs = tileAttrs {
+            tile.flipHoriz = tileAttrs.hflip
+            tile.flipVert  = tileAttrs.vflip
+            tile.flipDiag  = tileAttrs.dflip
+        }
         
         // set the tile overlap amount
         tile.setTileOverlap(tilemap.tileOverlap)
@@ -346,8 +344,14 @@ public class SKTileLayer: SKTiledLayerObject {
         tile.layer = self
         self.tiles[Int(coord.x), Int(coord.y)] = tile
         
-        // get the position in the layer (plus tileset offset)
-        let tilePosition = pointForCoordinate(coord: coord, offsetX: offset.x, offsetY: offset.y)
+        // set orientation & anchor point from the tile data
+        if (tileData?.tileset != nil) {
+            tile.orientTile()
+        }
+        
+        // get the position in the layer, plus the tileset offset (the layer offset is applied to the layer node)
+        let tileOffset = tileData?.tileset?.tileOffset ?? CGPoint.zero
+        let tilePosition = pointForCoordinate(coord: coord, offsetX: tileOffset.x, offsetY: tileOffset.y)
         tile.position = tilePosition
         
         if let currentTile = existingTile {
@@ -397,8 +401,8 @@ public class SKTileLayer: SKTiledLayerObject {
         tile.layer = self
         self.tiles[Int(coord.x), Int(coord.y)] = tile
         
-        // get the position in the layer (plus tileset offset)
-        let tilePosition = pointForCoordinate(coord: coord, offsetX: offset.x, offsetY: offset.y)
+        // get the position in the layer (the layer offset is applied to the layer node)
+        let tilePosition = pointForCoordinate(coord: coord)
         tile.position = tilePosition
 
         if let currentTile = existingTile {
@@ -452,11 +456,31 @@ public class SKTileLayer: SKTiledLayerObject {
     
     /// Clear all tiles.
     public func clearTiles() {
-        self.tiles.forEach { tile in
-            tile?.removeAnimation()
-            tile?.removeFromParent()
+        let currentTiles = getTiles()
+        currentTiles.forEach { tile in
+            tile.removeAnimation()
+            tile.removeFromParent()
         }
+        removeTilesFromDataStorage(currentTiles)
         self.tiles = TilesArray(columns: Int(tilemap.size.width), rows: Int(tilemap.size.height))
+    }
+    
+    /// Removes tiles from the map's tile storage in one pass over the caches.
+    ///
+    /// - parameter tilesToRemove: `[SKTile]` tiles to remove.
+    internal func removeTilesFromDataStorage(_ tilesToRemove: [SKTile]) {
+        guard let dataStorage = tilemap?.dataStorage, (tilesToRemove.isEmpty == false) else { return }
+        if (tilesToRemove.count == 1) {
+            dataStorage.tileRemoved(tilesToRemove[0])
+            return
+        }
+        let removedIDs = Set(tilesToRemove.map { ObjectIdentifier($0) })
+        for list in dataStorage.staticTileCache.values {
+            list.array.removeAll { removedIDs.contains(ObjectIdentifier($0)) }
+        }
+        for list in dataStorage.animatedTileCache.values {
+            list.array.removeAll { removedIDs.contains(ObjectIdentifier($0)) }
+        }
     }
     
     /// Remove the tile at a given coordinate.
@@ -487,15 +511,15 @@ public class SKTileLayer: SKTiledLayerObject {
         
         if let tileData = tilemap.getTileData(globalID: globalId) {
             
-            // set the tile data flip flags
-            tileData.flipHoriz = tileAttrs.hflip
-            tileData.flipVert  = tileAttrs.vflip
-            tileData.flipDiag  = tileAttrs.dflip
-            
             // get tile object from delegate
             let Tile = (tilemap.delegate != nil) ? tilemap.delegate!.objectForTileType(named: tileData.type) : SKTile.self
             
             if let tile = Tile.init(data: tileData) {
+                
+                // set the flip flags for this tile
+                tile.flipHoriz = tileAttrs.hflip
+                tile.flipVert  = tileAttrs.vflip
+                tile.flipDiag  = tileAttrs.dflip
                 
                 // set the tile overlap amount
                 tile.setTileOverlap(tilemap.tileOverlap)
@@ -543,24 +567,64 @@ public class SKTileLayer: SKTiledLayerObject {
         return nil
     }
     
-    /// Set a tile at the given coordinate.
+    /// Place a tile at the given coordinate, replacing (and removing) the current tile there.
     ///
     /// - parameter x:   `Int` x-coordinate
     /// - parameter y:   `Int` y-coordinate
-    /// - parameter tile: `SKTile?` tile to place, or `nil` to create one.
-    /// - returns: `SKTile?` tile.
+    /// - parameter tile: `SKTile?` tile to place, or `nil` to remove the current tile.
+    /// - returns: `SKTile?` the placed tile, or `nil` if the coordinate is invalid or `tile` is `nil`.
     public func setTile(_ x: Int, _ y: Int, tile: SKTile? = nil) -> SKTile? {
-        self.tiles[x, y] = tile
-        return tile
+        return setTile(at: CGPoint(x: CGFloat(x), y: CGFloat(y)), tile: tile)
     }
     
-    /// Set a tile at the given coordinate.
+    /// Place a tile at the given coordinate, replacing (and removing) the current tile there.
     ///
     /// - parameter coord:   `CGPoint` tile coordinate.
-    /// - parameter tile: `SKTile?` tile to place, or `nil` to create one.
-    /// - returns: `SKTile?` tile.
+    /// - parameter tile: `SKTile?` tile to place, or `nil` to remove the current tile.
+    /// - returns: `SKTile?` the placed tile, or `nil` if the coordinate is invalid or `tile` is `nil`.
     public func setTile(at coord: CGPoint, tile: SKTile? = nil) -> SKTile? {
+        guard isValid(coord: coord) else {
+            return nil
+        }
+        
+        // already placed here
+        if let tile = tile, (tileAt(coord: coord) === tile) {
+            return tile
+        }
+        
+        // remove the current tile
+        let existingTile = removeTileAt(coord: coord)
+        
+        guard let tile = tile else {
+            return nil
+        }
+        
+        // detach the tile from wherever it was before
+        if (tile.parent != nil) {
+            tile.removeFromParent()
+            tilemap?.dataStorage?.tileRemoved(tile)
+        }
+        
+        tile.layer = self
         self.tiles[Int(coord.x), Int(coord.y)] = tile
+        
+        // set orientation & anchor point from the tile data
+        if (tile.tileData.tileset != nil) {
+            tile.orientTile()
+        }
+        
+        // position in the layer, plus the tileset offset
+        let tileOffset = tile.tileData.tileset?.tileOffset ?? CGPoint.zero
+        tile.position = pointForCoordinate(coord: coord, offsetX: tileOffset.x, offsetY: tileOffset.y)
+        
+        if let currentTile = existingTile {
+            tile.zPosition = currentTile.zPosition
+        }
+        
+        addChild(tile)
+        
+        // add to tile cache
+        tilemap?.dataStorage?.tileAdded(tile)
         return tile
     }
     
@@ -859,7 +923,8 @@ extension SKTiledLayerObject {
     
     /// Returns the actual zPosition as rendered by the scene.
     internal var actualZPosition: CGFloat {
-        return (isTopLevel == true) ? zPosition : parents.reduce(zPosition, { result, parent in
+        // `parents` begins with the layer itself
+        return (isTopLevel == true) ? zPosition : parents.reduce(0, { result, parent in
             return result + parent.zPosition
         })
     }

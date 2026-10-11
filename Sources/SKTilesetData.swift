@@ -88,7 +88,7 @@ public class SKTilesetData: SKTiledObject {
 
     /// Animated frames.
     internal var currentTime: TimeInterval = 0
-    internal var frameIndex: UInt8 = 0
+    internal var frameIndex: Int = 0
 
     /// Supress tile animation.
     internal var blockAnimation: Bool = false
@@ -351,18 +351,16 @@ public class SKTilesetData: SKTiledObject {
 }
 
 
-public func == (lhs: SKTilesetData, rhs: SKTilesetData) -> Bool {
-    return (lhs.hashValue == rhs.hashValue)
-}
-
-
-
 extension SKTilesetData: Hashable {
 
-    /// :nodoc: Tile data hash function.
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(id)
-        hasher.combine(globalID)
+    /// :nodoc: Tile data is compared by identity; its ids change when the tileset's `firstGID` does.
+    nonisolated public static func == (lhs: SKTilesetData, rhs: SKTilesetData) -> Bool {
+        return lhs === rhs
+    }
+
+    /// :nodoc: Tile data hash function (identity).
+    nonisolated public func hash(into hasher: inout Hasher) {
+        hasher.combine(ObjectIdentifier(self))
     }
 }
 

@@ -86,6 +86,10 @@ extension SKTileLayer {
         
         guard let graph = graph else { return nil }
         
+        // tiles are compared by identity; sets keep the per-cell lookups constant time
+        let walkableTiles = Set(walkable.map { ObjectIdentifier($0) })
+        let obstacleTiles = Set(obstacles.map { ObjectIdentifier($0) })
+        
         var nodesToRemove: [GKGridGraphNode] = []
         
         for col in 0 ..< Int(size.width) {
@@ -103,11 +107,11 @@ extension SKTileLayer {
                             tiledNode.parseProperties(completion: nil)
                         }
                         
-                        if (walkable.contains(tile)) {
+                        if (walkableTiles.contains(ObjectIdentifier(tile))) {
                             continue
                         }
                         
-                        if (obstacles.contains(tile)) {
+                        if (obstacleTiles.contains(ObjectIdentifier(tile))) {
                             nodesToRemove.append(node)
                             continue
                         }

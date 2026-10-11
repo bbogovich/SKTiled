@@ -71,7 +71,7 @@ public struct DebugDrawOptions: OptionSet {
     static public let drawAnchor            = DebugDrawOptions(rawValue: 1 << 7) // 128
     
     static public let all: DebugDrawOptions = [.drawGrid, .drawBounds, .drawGraph, .drawObjectBounds,
-                                               .drawObjectBounds, .drawMouseOverObject,
+                                               .drawTileBounds, .drawMouseOverObject,
                                                .drawBackground, .drawAnchor]
 }
 
@@ -125,9 +125,7 @@ extension SKTilemap {
         
         if (duration > 0) {
             let fadeAction = SKAction.fadeAfter(wait: duration, alpha: 0)
-            boundsShape.run(fadeAction, withKey: "MAP_FADEOUT_ACTION", completion: {
-                boundsShape.removeFromParent()
-            })
+            boundsShape.run(SKAction.sequence([fadeAction, SKAction.removeFromParent()]), withKey: "MAP_FADEOUT_ACTION")
         }
     }
 }

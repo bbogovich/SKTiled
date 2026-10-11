@@ -73,20 +73,13 @@ public class SKGroupLayer: SKTiledLayerObject {
         return layers.isEmpty == false ? layers.map {$0.zPosition}.max()! : 0
     }
     
-    /// Returns a flattened array of child layers.
+    /// Returns a flattened array of this group and its child layers, in render order (lowest index first).
     override public var layers: [SKTiledLayerObject] {
         var result: [SKTiledLayerObject] = [self]
-        for layer in _layers.sorted(by: { $0.index > $1.index }) {
+        for layer in _layers.sorted(by: { $0.index < $1.index }) {
             result += layer.layers
         }
         return result
-    }
-    
-    override public var speed: CGFloat {
-        didSet {
-            guard oldValue != speed else { return }
-            self.layers.forEach { $0.speed = speed }
-        }
     }
     
     // MARK: - Init
@@ -148,8 +141,12 @@ public class SKGroupLayer: SKTiledLayerObject {
         
         let (success, inserted) = _layers.insert(layer)
         if (success == false) {
+            // the layer is already in the group; adding it as a child again would raise a SpriteKit exception
             Logger.default.log("could not add layer: \"\(inserted.layerName)\"", level: .error)
+            return (success, inserted)
         }
+        
+        tilemap?.invalidateLayerCache()
         
         
         // layer offset
@@ -176,7 +173,15 @@ public class SKGroupLayer: SKTiledLayerObject {
     /// - parameter layer: `SKTiledLayerObject` layer object.
     /// - returns: `SKTiledLayerObject?` removed layer.
     public func removeLayer(_ layer: SKTiledLayerObject) -> SKTiledLayerObject? {
-        return _layers.remove(layer)
+        guard let removed = _layers.remove(layer) else {
+            return nil
+        }
+        tilemap?.invalidateLayerCache()
+        removed.removeFromParent()
+        
+        // stop updating the layer's tiles & objects
+        removed.removeFromDataStorage()
+        return removed
     }
     
     // MARK: - Updating: Group Layer

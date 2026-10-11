@@ -163,13 +163,6 @@ public class SKObjectGroup: SKTiledLayerObject {
         }
     }
     
-    override public var speed: CGFloat {
-        didSet {
-            guard oldValue != speed else { return }
-            self.getObjects().forEach {$0.speed = speed}
-        }
-    }
-    
     // MARK: - Init
     /// Initialize with layer name and parent `SKTilemap`.
     ///
@@ -212,7 +205,8 @@ public class SKObjectGroup: SKTiledLayerObject {
     /// - parameter withColor: `SKColor?` optional override color (otherwise defaults to parent layer color).
     /// - returns: `SKTileObject?` added object.
     public func addObject(_ object: SKTileObject, withColor: SKColor? = nil) -> SKTileObject? {
-        if objects.contains(where: { $0.hashValue == object.hashValue }) {
+        // objects hash by id, and objects created in code share an id, so check identity
+        if objects.contains(where: { $0 === object }) {
             return nil
         }
         
@@ -248,8 +242,12 @@ public class SKObjectGroup: SKTiledLayerObject {
     /// - parameter object:    `SKTileObject` object.
     /// - returns: `SKTileObject?` removed object.
     public func removeObject(_ object: SKTileObject) -> SKTileObject? {
-        tilemap?.dataStorage?.objectRemoved(object)
-        return objects.remove(object)
+        guard let removed = objects.remove(object) else {
+            return nil
+        }
+        removed.removeFromParent()
+        tilemap?.dataStorage?.objectRemoved(removed)
+        return removed
     }
     
     /// Parses the object group's custom properties.
@@ -373,7 +371,11 @@ public class SKObjectGroup: SKTiledLayerObject {
         }
         let object = SKTileObject(width: objectSize.width, height: objectSize.height)
         object.gid = data.globalID
-        _ = addObject(object)
+        // give the object a unique id before it is stored (objects hash by id)
+        object.id = tilemap.nextObjectID()
+        if (addObject(object) == nil) {
+            log("could not add tile object (id: \(object.id)) to layer \"\(layerName)\"", level: .error)
+        }
         object.draw()
         return object
     }

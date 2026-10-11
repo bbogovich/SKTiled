@@ -96,8 +96,10 @@ internal class SKTilemapParser: NSObject, XMLParserDelegate {
     fileprivate var activeElement: String?                             // current object
 
     // template objects
-    fileprivate var templateObjects: [SKTileObject] = []               // objects reference by template files
-    fileprivate var activeTemplateTileset: SKTileset?                  // active template object tileset
+    fileprivate var templateObjects: [PendingTemplateObject] = []      // objects that reference template files, resolved after parsing
+    fileprivate var templates: [String: TemplateDefinition] = [:]      // parsed templates keyed by standardized file path
+    fileprivate var activeTemplate: TemplateDefinition?                // template file being parsed
+    fileprivate var templateOnlyTilesets: [SKTileset] = []             // tilesets referenced only by templates, in load order
 
     fileprivate var lastElement: AnyObject?                            // last element created
     fileprivate var elementPath: [AnyObject] = []                      // current element path
@@ -107,8 +109,10 @@ internal class SKTilemapParser: NSObject, XMLParserDelegate {
     fileprivate var currentProbability: CGFloat?                       // current tile probability
 
     fileprivate var properties: [String: String] = [:]                 // last properties created
+    fileprivate var openProperties: [(name: String, hasValue: Bool)] = []  // `<property>` elements not yet closed
     fileprivate var data: [String: [UInt32]] = [:]                     // store data for tile layers to render in a second pass
     fileprivate var tileData: [UInt32] = []                            // last tile data read
+    fileprivate var isReadingLayerData: Bool = false                   // inside a tile layer's `<data>` element
     fileprivate var characterData: String = ""                         // current tile data (string)
 
     fileprivate var compression: CompressionType = .uncompressed       // compression type
@@ -140,7 +144,11 @@ internal class SKTilemapParser: NSObject, XMLParserDelegate {
                        ignoreProperties noparse: Bool = false,
                        loggingLevel: LoggingLevel = TiledGlobals.default.loggingLevel) throws -> SKTilemap {
 
+        // use the requested level for this load only
+        let previousLoggingLevel = Logger.default.loggingLevel
         Logger.default.loggingLevel = loggingLevel
+        defer { Logger.default.loggingLevel = previousLoggingLevel }
+
         parsingMode = .tmx
         tileUpdateMode = updateMode
         mapDelegate = delegate
@@ -152,12 +160,15 @@ internal class SKTilemapParser: NSObject, XMLParserDelegate {
         let url = url.standardizedFileURL
         resolver = TiledAssetResolver(rootDirectory: url.deletingLastPathComponent(), bundle: bundle)
 
+        // preloaded tilesets are matched against the map's references by their file URL
         for tileset in withTilesets ?? [] {
-            guard let filename = tileset.filename else {
-                log("tileset \"\(tileset.name)\" has no filename property.", level: .error)
-                continue
+            if let tilesetURL = tileset.url {
+                tilesets[tilesetURL.standardizedFileURL.path] = tileset
+            } else if let filename = tileset.filename, filename.hasPrefix("/") {
+                tilesets[URL(fileURLWithPath: filename).standardizedFileURL.path] = tileset
+            } else {
+                log("tileset \"\(tileset.name)\" has no file URL and cannot be shared.", level: .error)
             }
-            tilesets[URL(fileURLWithPath: filename).standardizedFileURL.path] = tileset
         }
 
         try parseFiles(startingWith: url)
@@ -165,6 +176,8 @@ internal class SKTilemapParser: NSObject, XMLParserDelegate {
         guard let currentMap = tilemap else {
             throw TiledError.invalidContent(url, reason: "no <map> element found.")
         }
+
+        try resolveTemplateObjects()
 
         tilesets = [:]
         mapDelegate?.didReadMap(currentMap)
@@ -190,7 +203,11 @@ internal class SKTilemapParser: NSObject, XMLParserDelegate {
                        ignoreProperties noparse: Bool = false,
                        loggingLevel: LoggingLevel = TiledGlobals.default.loggingLevel) throws -> [SKTileset] {
 
+        // use the requested level for this load only
+        let previousLoggingLevel = Logger.default.loggingLevel
         Logger.default.loggingLevel = loggingLevel
+        defer { Logger.default.loggingLevel = previousLoggingLevel }
+
         parsingMode = .tsx
         mapDelegate = delegate
         self.tilesetDataSource = tilesetDataSource
@@ -281,6 +298,58 @@ internal class SKTilemapParser: NSObject, XMLParserDelegate {
             fail(.unreadableFile(currentURL, reason: error.localizedDescription), parser)
         }
         return nil
+    }
+
+    /// Applies each parsed template to the objects that reference it.
+    ///
+    /// Runs after every file is parsed, so the tilesets are loaded and their first gids are final. Tilesets that only
+    /// templates reference are added to the map first, numbered after the map's own tilesets.
+    private func resolveTemplateObjects() throws {
+        guard let tilemap = tilemap else { return }
+
+        for tileset in templateOnlyTilesets {
+            tileset.firstGID = tilemap.tilesets.map { $0.lastGID + 1 }.max() ?? 1
+            tilemap.addTileset(tileset)
+        }
+
+        // Tiled's flip and rotation flags occupy the top four bits of a gid
+        let flagBits: UInt32 = 0xF0000000
+
+        for pending in templateObjects {
+            guard let template = templates[pending.url.path] else {
+                throw TiledError.invalidContent(pending.url, reason: "no <template> element found.")
+            }
+
+            // template attributes first, then the instance's own overrides
+            let object = pending.object
+            object.setObjectAttributes(attributes: template.attributes.merging(pending.attributes) { $1 })
+
+            // an instance gid is already a map gid; a template gid is numbered from the template's tileset reference
+            if pending.attributes["gid"] == nil, let templateGID = template.attributes["gid"].flatMap({ UInt32($0) }) {
+                let localID = Int(templateGID & ~flagBits) - template.firstGID
+                guard let tilesetURL = template.tilesetURL,
+                      let tileset = tilesets[tilesetURL.path],
+                      localID >= 0 else {
+                    throw TiledError.invalidContent(pending.url, reason: "tile object gid \(templateGID) has no tileset.")
+                }
+                object.gid = Int(UInt32(tileset.getGlobalID(forLocalID: localID)) | (templateGID & flagBits))
+            }
+
+            if (object.gid != nil) {
+                object.visible = true
+            }
+
+            // template properties, unless the instance overrides them
+            for (key, value) in template.properties where object.properties[key] == nil {
+                object.properties[key] = value
+            }
+            object.parseProperties(completion: nil)
+            object.isInitialized = true
+        }
+
+        templateObjects = []
+        templates = [:]
+        templateOnlyTilesets = []
     }
 
 
@@ -417,26 +486,46 @@ internal class SKTilemapParser: NSObject, XMLParserDelegate {
                     return
                 }
 
-                // check to see if tileset already exists (either an empty new tileset, or we've passed a pre-loaded tileset).
-                if let existingTileset = tilesets[tilesetURL.path] {
-                    // if we're in tilemap parsing mode, add the tileset to the map
-                    if (parsingMode == .tmx) {
-                        self.tilemap?.addTileset(existingTileset)
+                // A preloaded tileset that still belongs to another map with a different first gid is not
+                // re-numbered under that map: this map loads its own copy instead.
+                if (parsingMode == .tmx),
+                   let sharedTileset = tilesets[tilesetURL.path],
+                   let owner = sharedTileset.tilemap, owner !== self.tilemap,
+                   sharedTileset.firstGID != firstGID {
+                    log("tileset \"\(sharedTileset.name)\" is used by map \"\(owner.mapName)\" with firstgid \(sharedTileset.firstGID); loading a separate copy with firstgid \(firstGID).", level: .warning)
+                    tilesets[tilesetURL.path] = nil
+                }
 
-                        // set the first gid parameter
-                        existingTileset.firstGID = firstGID
+                if (parsingMode == .tx) {
 
-                        lastElement = existingTileset
+                    // template files number their tiles from their own `firstgid`; the gid is translated after parsing
+                    activeTemplate?.tilesetURL = tilesetURL
+                    activeTemplate?.firstGID = firstGID
 
-                        // set this to nil, just in case we're looking for a collections tileset.
-                        currentID = nil
+                    // a tileset used only by templates is loaded, and added to the map with free gids after parsing
+                    if tilesets[tilesetURL.path] == nil && !fileQueue.contains(tilesetURL) {
+                        fileQueue.append(tilesetURL)
 
-                        // we're in a template
-                    } else {
+                        let tileset = SKTileset(source: source, firstgid: 0, tilemap: self.tilemap)
+                        tileset.loggingLevel = self.loggingLevel
+                        tileset.ignoreProperties = self.ignoreProperties
+                        tileset.url = tilesetURL
 
-                        // set the current tileset
-                        activeTemplateTileset = existingTileset
+                        tilesets[tilesetURL.path] = tileset
+                        templateOnlyTilesets.append(tileset)
                     }
+
+                // check to see if tileset already exists (either an empty new tileset, or we've passed a pre-loaded tileset).
+                } else if let existingTileset = tilesets[tilesetURL.path] {
+                    self.tilemap?.addTileset(existingTileset)
+
+                    // set the first gid parameter
+                    existingTileset.firstGID = firstGID
+
+                    lastElement = existingTileset
+
+                    // set this to nil, just in case we're looking for a collections tileset.
+                    currentID = nil
 
                 } else if !fileQueue.contains(tilesetURL) {
 
@@ -467,7 +556,8 @@ internal class SKTilemapParser: NSObject, XMLParserDelegate {
                 if let existingTileset = tilesets[currentFilename] {
                     
                     guard let width = attributeDict["tilewidth"].flatMap({ Int($0) }),
-                          let height = attributeDict["tileheight"].flatMap({ Int($0) }) else {
+                          let height = attributeDict["tileheight"].flatMap({ Int($0) }),
+                          width > 0, height > 0 else {
                         fail("tileset \"\(name)\" has no valid tilewidth/tileheight.", parser)
                         return
                     }
@@ -535,11 +625,14 @@ internal class SKTilemapParser: NSObject, XMLParserDelegate {
                 return
             }
 
-            // multi-line string properties store their value as element text; class properties have no value
-            let value = attributeDict["value"] ?? ""
+            // multi-line string properties store their value as element text (read at `</property>`);
+            // class properties have no value
+            let value = attributeDict["value"]
 
             // stash properties
-            properties[name] = value
+            properties[name] = value ?? ""
+            openProperties.append((name: name, hasValue: value != nil))
+            characterData = ""
         }
         
         
@@ -686,15 +779,15 @@ internal class SKTilemapParser: NSObject, XMLParserDelegate {
                         log("\(parsingMode) parser: Warning: tile id \(currentID) is invalid.", level: .warning)
                     }
                 } else {
-                    // parse tileset properties
-                    tileset.parseProperties(completion: nil)
-
                     // query data source delegate for source image substitution
                     let imageSource = tilesetDataSource?.willAddSpriteSheet(to: tileset, fileNamed: source) ?? source
                     guard let loaded = loadImage(imageSource, parser) else { return }
 
                     // add the tileset spritesheet image
                     tileset.addTextures(fromSpriteSheet: loaded.image, source: loaded.source, replace: false, transparent: attributeDict["trans"])
+
+                    // parse tileset properties now that the tile data exists (`walkable` lists tile ids)
+                    tileset.parseProperties(completion: nil)
 
                     // delegate callback
                     tileset.setupAnimatedTileData()
@@ -718,8 +811,13 @@ internal class SKTilemapParser: NSObject, XMLParserDelegate {
                     tileData.append(value)
                 }
             }
-                
-                // otherwise, we're adding data to a tileset. Attributes can be `type` and `probability`.
+
+            // Tiled writes an empty cell of XML-encoded layer data as `<tile/>`, with no gid
+            else if (isReadingLayerData == true) && (encoding == .xml) {
+                tileData.append(0)
+            }
+
+            // otherwise, we're adding data to a tileset. Attributes can be `type` and `probability`.
             else if let id = attributeDict["id"] {
 
                 guard let intValue = Int(id) else {
@@ -750,37 +848,22 @@ internal class SKTilemapParser: NSObject, XMLParserDelegate {
         // id, x, y required
         if (elementName == "object") {
             
-            // template object inside a template file
+            // template object inside a template file: stored, and applied to its instances after parsing
             if (parsingMode == .tx) {
-                
-                // get last template object
-                if let currentObject = templateObjects.popLast() {
-                    
-                    // set the objects initial attributes
-                    currentObject.setObjectAttributes(attributes: attributeDict)
-                    currentObject.visible = (currentObject.gid != nil)
-                    
-                    // set the last object
-                    lastElement = currentObject
-                    
-                    // get local id with flipped flags
-                    if let localID = currentObject.gid {
-                        guard let templateTileset = activeTemplateTileset else {
-                            log("no active tileset for this template.", level: .error)
-                            return
-                        }
-                        
-                        
-                        let flipped = flippedTileFlags(id: UInt32(localID))
-                        let globalId = templateTileset.getGlobalID(forLocalID: Int(flipped.gid))
-                        
-                        currentObject.gid = globalId
-                        currentObject.tileData?.flipHoriz = flipped.hflip
-                        currentObject.tileData?.flipVert = flipped.vflip
-                        currentObject.tileData?.flipDiag = flipped.dflip
-                    }
+                guard let template = activeTemplate else {
+                    fail("<object> outside of a <template>.", parser)
+                    return
                 }
-                
+
+                // Tiled 1.9 wrote an object's type as `class`
+                var templateAttributes = attributeDict
+                if templateAttributes["type"] == nil, let objectClass = templateAttributes["class"] {
+                    templateAttributes["type"] = objectClass
+                }
+
+                template.attributes = templateAttributes
+                lastElement = template
+
             } else {
                 // adding a group to tileset tile
                 if let _ = lastElement as? SKTileset {}
@@ -812,9 +895,12 @@ internal class SKTilemapParser: NSObject, XMLParserDelegate {
                             fail(.fileNotFound(expected, referencedBy: currentURL), parser)
                             return
                         }
-                        fileQueue.append(templateURL)
+                        // each template file is parsed once per load
+                        if templates[templateURL.path] == nil && !fileQueue.contains(templateURL) {
+                            fileQueue.append(templateURL)
+                        }
                         tileObject.isInitialized = false
-                        templateObjects.insert(tileObject, at: 0)
+                        templateObjects.append(PendingTemplateObject(object: tileObject, attributes: objectAttributes, url: templateURL))
                     }
                 }
             }
@@ -961,8 +1047,17 @@ internal class SKTilemapParser: NSObject, XMLParserDelegate {
             }
         }
         
+        // a template file: its object and tileset reference are stored for the objects that use it
+        if (elementName == "template") {
+            let template = TemplateDefinition()
+            templates[currentFilename] = template
+            activeTemplate = template
+        }
+
         // decode data here, and reset
         if (elementName == "data") {
+            isReadingLayerData = (lastElement is SKTileLayer)
+
             // get the encoding...
             if let encoding = attributeDict["encoding"] {
                 guard let tilemapEncoding = TilemapEncoding(rawValue: encoding) else {
@@ -990,9 +1085,22 @@ internal class SKTilemapParser: NSObject, XMLParserDelegate {
                          namespaceURI: String?,
                          qualifiedName qName: String?) {
         
+        // a property without a `value` attribute takes its value from the element text (multi-line strings)
+        if elementName == "property" {
+            if let property = openProperties.popLast(), property.hasValue == false {
+                properties[property.name] = characterData.trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+        }
+
         // look for last element to add properties to
         if elementName == "properties" {
-            
+
+            // template object properties (applied to the template's instances after parsing)
+            if let template = lastElement as? TemplateDefinition {
+                template.properties.merge(properties) { $1 }
+                properties = [:]
+            }
+
             // tilemap properties
             if let tilemap = lastElement as? SKTilemap {
                 for (key, value) in properties {
@@ -1002,14 +1110,12 @@ internal class SKTilemapParser: NSObject, XMLParserDelegate {
                 tilemap.parseProperties(completion: nil)
             }
             
-            // layer properties
-            if let layer = lastElement as? SKTiledLayerObject {
-                if (currentID == nil) {
-                    for (key, value) in properties {
-                        layer.properties[key] = value
-                    }
+            // layer properties (with a current id, the properties belong to an object in the layer)
+            if let layer = lastElement as? SKTiledLayerObject, (currentID == nil) {
+                for (key, value) in properties {
+                    layer.properties[key] = value
                 }
-                
+
                 layer.parseProperties(completion: nil)
             }
             
@@ -1065,10 +1171,17 @@ internal class SKTilemapParser: NSObject, XMLParserDelegate {
                     break
             }
 
+            let expectedCount = Int(tileLayer.size.width) * Int(tileLayer.size.height)
+            guard tileData.count == expectedCount else {
+                fail("layer \"\(tileLayer.layerName)\" has \(tileData.count) tiles of data, expected \(expectedCount) (\(Int(tileLayer.size.width))x\(Int(tileLayer.size.height))).", parser)
+                return
+            }
+
             // write data to buffer
             data[tileLayer.uuid] = tileData
 
             // reset for the next layer
+            isReadingLayerData = false
             tileData = []
             encoding = .xml
             compression = .uncompressed
@@ -1097,6 +1210,9 @@ internal class SKTilemapParser: NSObject, XMLParserDelegate {
                         if let currentProbability = currentProbability {
                             currentTileData.probability = currentProbability
                         }
+
+                        // image collection tiles are created after their properties are read, so apply them here
+                        currentTileData.parseProperties(completion: nil)
                     }
                 }
             }
@@ -1185,7 +1301,10 @@ internal class SKTilemapParser: NSObject, XMLParserDelegate {
                     // Logger.default.cache(LogEvent("tileset \"\(tileset.name)\" finished, \(tilesetImagesAdded) images added.", level: .debug, caller: self.logSymbol))
                     Logger.default.log("tileset \"\(tileset.name)\" finished, \(tilesetImagesAdded) images added.", level: .debug, symbol: self.logSymbol)
                     tileset.isRendered = true
-                    
+
+                    // parse tileset properties now that the tile data exists (`walkable` lists tile ids)
+                    tileset.parseProperties(completion: nil)
+
                     // delegate callback
                     tileset.setupAnimatedTileData()
                     self.mapDelegate?.didAddTileset(tileset)
@@ -1199,13 +1318,8 @@ internal class SKTilemapParser: NSObject, XMLParserDelegate {
         
         // template reference
         if (elementName == "template") {
-            
-            if let currentObject = lastElement as? SKTileObject {
-                currentObject.isInitialized = true
-            }
-            
             lastElement = nil
-            activeTemplateTileset = nil
+            activeTemplate = nil
         }
         
         
@@ -1262,6 +1376,31 @@ internal class SKTilemapParser: NSObject, XMLParserDelegate {
         
         return nil
     }
+}
+
+
+/// A parsed TX template file.
+fileprivate final class TemplateDefinition {
+
+    /// Attributes of the template's `<object>`.
+    var attributes: [String: String] = [:]
+
+    /// Custom properties of the template's `<object>`.
+    var properties: [String: String] = [:]
+
+    /// Tileset referenced by the template (tile objects only).
+    var tilesetURL: URL?
+
+    /// First gid the template assigns to its tileset; the object's gid is numbered from it.
+    var firstGID: Int = 1
+}
+
+
+/// An object that references a template, with the attributes it set itself.
+fileprivate struct PendingTemplateObject {
+    let object: SKTileObject
+    let attributes: [String: String]
+    let url: URL
 }
 
 
