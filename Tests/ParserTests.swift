@@ -37,26 +37,13 @@ class ParserTests: XCTestCase {
     var tilemap: SKTilemap?
     let tilemapDelegate = TestMapDelegate()
     let tilesetDelegate = TestTilesetDelegate()
-    var testBundle: Bundle!
     let tilemapName = "test-tilemap"
     
     override func setUp() async throws {
         try await super.setUp()
-        
-        if (testBundle == nil) {
-            #if SWIFT_PACKAGE
-            testBundle = Bundle.module
-            #else
-            testBundle = Bundle(for: type(of: self))
-            #endif
-        }
-        
-        if (tilemap == nil) {
-            print("➜ loading test tilemap: \"\(tilemapName)\"...")
-            let mapurl = testBundle!.url(forResource: tilemapName, withExtension: "tmx")!
-            tilemap = try? SKTilemap.load(url: mapurl, delegate: tilemapDelegate,
-                                     tilesetDataSource: tilesetDelegate, loggingLevel: .none)
-        }
+        let mapurl = try XCTUnwrap(Bundle.module.url(forResource: tilemapName, withExtension: "tmx"))
+        tilemap = try SKTilemap.load(url: mapurl, delegate: tilemapDelegate,
+                                 tilesetDataSource: tilesetDelegate, loggingLevel: .none)
     }
 
 

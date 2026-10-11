@@ -32,25 +32,13 @@ import XCTest
 @MainActor
 class PropertiesTests: XCTestCase {
     
-    var testBundle: Bundle!
     var tilemap: SKTilemap?
     
     override func setUp() async throws {
         try await super.setUp()
-        
-        if (testBundle == nil) {
-            TiledGlobals.default.loggingLevel = .none
-            #if SWIFT_PACKAGE
-            testBundle = Bundle.module
-            #else
-            testBundle = Bundle(for: type(of: self))
-            #endif
-        }
-        
-        if (tilemap == nil) {
-            let mapurl = testBundle!.url(forResource: "test-tilemap", withExtension: "tmx")!
-            tilemap = try? SKTilemap.load(url: mapurl, loggingLevel: .none)
-        }
+        TiledGlobals.default.loggingLevel = .none
+        let mapurl = try XCTUnwrap(Bundle.module.url(forResource: "test-tilemap", withExtension: "tmx"))
+        tilemap = try SKTilemap.load(url: mapurl, loggingLevel: .none)
     }
     
     
@@ -108,7 +96,7 @@ class PropertiesTests: XCTestCase {
      the `SKTilemap.allowZoom` should remain true.
      */
     func testPropertiesAreIgnored() throws {
-        let mapurl = testBundle!.url(forResource: "test-tilemap", withExtension: "tmx")!
+        let mapurl = try XCTUnwrap(Bundle.module.url(forResource: "test-tilemap", withExtension: "tmx"))
         let ignoredMap = try SKTilemap.load(url: mapurl, ignoreProperties: true)
         XCTAssertFalse(ignoredMap.allowZoom == false, "❗️tilemap `allowZoom` property should still be the default `true` value")
     }

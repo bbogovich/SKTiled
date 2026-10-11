@@ -29,42 +29,36 @@ import XCTest
 @testable import SKTiled
 
 
+/// Load times for a small map (dungeon-16x16: 22 × 21 tiles, three tilesets, CSV data) and a larger one
+/// (roguelike-16x16: 42 × 42 tiles, zlib-compressed data, animated tiles), both copies of demo maps.
 @MainActor
-class PerformanceTests: XCTestCase {
-    
-    var testBundle: Bundle!
-    
+final class PerformanceTests: XCTestCase {
+
     override func setUp() async throws {
         try await super.setUp()
-        
+        TiledGlobals.default.loggingLevel = .none
+    }
 
-        if (testBundle == nil) {
-            TiledGlobals.default.loggingLevel = .none
-            testBundle = Bundle.module
-        }
+    func testSmallMapLoadTime() throws {
+        try measureLoad(of: "dungeon-16x16")
     }
-    
-    
-    func testSmallMapLoadTime() {
-        self.measure {
-            if let mapURL = testBundle!.url(forResource: "test-small", withExtension: "tmx") {
-                if let map = try? SKTilemap.load(url: mapURL, loggingLevel: .none) {
-                    map.debugDrawOptions = [.drawGrid, .drawBounds]
-                }
-            }
-            self.stopMeasuring()
-        }
-        
+
+    func testLargeMapLoadTime() throws {
+        try measureLoad(of: "roguelike-16x16")
     }
-    
-    func testLargeMapLoadTime() {
-        self.measure {
-            if let mapURL = testBundle!.url(forResource: "test-large", withExtension: "tmx") {
-                if let map = try? SKTilemap.load(url: mapURL, loggingLevel: .none) {
-                    map.debugDrawOptions = [.drawGrid, .drawBounds]
-                }
-            }
-            self.stopMeasuring()
+
+    /// Loads the map once outside the measurement, so a missing or broken fixture fails with its real error, then
+    /// measures repeated loads. Few iterations: the larger map takes seconds to load.
+    private func measureLoad(of name: String) throws {
+        let url = try XCTUnwrap(Bundle.module.url(forResource: name, withExtension: "tmx", subdirectory: "Fixtures/performance"),
+                                "missing fixture \(name).tmx")
+        let tilemap = try SKTilemap.load(url: url, loggingLevel: .none)
+        XCTAssertGreaterThan(tilemap.tileCount, 0)
+
+        let options = XCTMeasureOptions()
+        options.iterationCount = 3
+        measure(options: options) {
+            XCTAssertNotNil(try? SKTilemap.load(url: url, loggingLevel: .none))
         }
     }
 }
