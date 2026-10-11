@@ -29,7 +29,15 @@ struct ContentView: View {
     @Bindable var model: DemoModel
 
     /// The selected example. Debug builds can start on the game with `SKTILED_DEMO_TAB=lodeRunner`.
-    @State private var selection = ProcessInfo.processInfo.environment["SKTILED_DEMO_TAB"] ?? "maps"
+    @State private var selection = Self.initialTab
+
+    private static var initialTab: String {
+        #if DEBUG
+        return ProcessInfo.processInfo.environment["SKTILED_DEMO_TAB"] ?? "maps"
+        #else
+        return "maps"
+        #endif
+    }
 
     var body: some View {
         TabView(selection: $selection) {

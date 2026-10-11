@@ -238,7 +238,7 @@ final class LodeRunnerScene: SKScene {
 
         // wait for the player, with the runner blinking, as the original does
         phase = .ready
-        status.message = "Press an arrow key to start"
+        status.message = "\(Self.movePrompt) to start"
         runnerSprite.run(.repeatForever(.sequence([.fadeOut(withDuration: 0.25), .fadeIn(withDuration: 0.25)])), withKey: "blink")
     }
 
@@ -290,6 +290,12 @@ final class LodeRunnerScene: SKScene {
 
     // MARK: - Input
 
+    #if os(macOS)
+    private static let movePrompt = "Press an arrow key"
+    #else
+    private static let movePrompt = "Move"
+    #endif
+
     /// Starts a dig on the next tick, toward the way the runner faces.
     func requestDig() {
         digRequested = true
@@ -320,9 +326,24 @@ final class LodeRunnerScene: SKScene {
 
     // MARK: - Game Loop
 
+    /// Pauses the game, silences it and drops held input (`true`), or carries on (`false`). Called when the game's
+    /// view disappears or the app leaves the foreground.
+    func setSuspended(_ suspended: Bool) {
+        guard suspended != isPaused else { return }
+        isPaused = suspended
+        input = LRInput()
+        digRequested = false
+        if suspended {
+            sounds.stopAll()
+        } else if phase == .playing, game?.isRunnerFalling == true {
+            // the fall sound loops for as long as the runner falls
+            sounds.play("fall", loops: true)
+        }
+    }
+
     override func update(_ currentTime: TimeInterval) {
         defer { lastUpdate = currentTime }
-        guard let lastUpdate else { return }
+        guard let lastUpdate, !isPaused else { return }
         tilemap?.update(currentTime)
 
         // run the rules at the original's fixed tick rate
@@ -378,10 +399,12 @@ final class LodeRunnerScene: SKScene {
         // the inner part of each sprite, so gold is taken near the cell's centre, as in the original
         let runnerBox = hitBox(of: runnerSprite, inset: CGSize(width: 6, height: 7))
         for (cell, gold) in goldOnMap where !gold.isHidden {
-            if runnerBox.intersects(hitBox(of: gold, inset: CGSize(width: 6, height: 7))) {
-                let taken = game?.collectGold(at: cell) ?? []
+            guard runnerBox.intersects(hitBox(of: gold, inset: CGSize(width: 6, height: 7))) else { continue }
+            // an overlapped object whose cell holds no gold in the rules (yet) does not end the search
+            let taken = game?.collectGold(at: cell) ?? []
+            if !taken.isEmpty {
                 events += taken
-                return !taken.isEmpty
+                return true
             }
         }
         return false
@@ -560,7 +583,7 @@ final class LodeRunnerScene: SKScene {
         lives -= 1
         if lives <= 0 {
             phase = .gameOver
-            status.message = "Game over. Press an arrow key to play again"
+            status.message = "Game over. \(Self.movePrompt) to play again"
         } else {
             loadLevel()
         }

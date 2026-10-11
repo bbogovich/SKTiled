@@ -46,6 +46,11 @@ struct MapBrowserView: View {
             }
         }
         #endif
+        .alert(model.notice?.title ?? "", isPresented: Binding(get: { model.notice != nil }, set: { if !$0 { model.notice = nil } })) {
+            Button("OK") {}
+        } message: {
+            Text(model.notice?.message ?? "")
+        }
     }
 }
 
@@ -71,6 +76,15 @@ private struct MapList: View {
             }
         }
         .navigationTitle("SKTiled")
+        #if os(macOS)
+        .contextMenu(forSelectionType: MapEntry.ID.self) { ids in
+            if let id = ids.first {
+                Button("Open in Tiled", systemImage: "arrow.up.forward.app") {
+                    model.openInTiled(id)
+                }
+            }
+        }
+        #endif
         #if !os(tvOS)
         .toolbar {
             ToolbarItem {

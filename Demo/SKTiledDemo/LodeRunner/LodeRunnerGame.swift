@@ -148,7 +148,7 @@ struct LodeRunnerGame {
 
     private var hiddenLadders: [LRCellPosition]
     private var laddersPlaced: Set<LRCellPosition> = []
-    private var runnerFalling = false
+    private(set) var isRunnerFalling = false
     private var tickCounter = 0          // the original's $53, 0...27
     private var schedulePhase = 0
     private var nextGuard = 0
@@ -267,22 +267,22 @@ struct LodeRunnerGame {
         }
 
         if runnerShouldFall() {
-            if !runnerFalling {
+            if !isRunnerFalling {
                 events.append(.runnerFell)
             }
-            runnerFalling = true
+            isRunnerFalling = true
             runner.frame = (runner.facing == .left) ? 7 : 15
             center(&runner.xsub)
             runner.ysub += 1
             if runner.ysub > 4 {
-                moveRunner(toCol: runner.col, row: runner.row + 1)
+                moveRunner(toCol: runner.col, row: runner.row + 1, &events)
                 runner.ysub = 0
             }
             return
         }
 
-        if runnerFalling {
-            runnerFalling = false
+        if isRunnerFalling {
+            isRunnerFalling = false
             events.append(.runnerLanded)
         }
 
@@ -292,7 +292,7 @@ struct LodeRunnerGame {
             center(&runner.xsub)
             runner.ysub -= 1
             if runner.ysub < 0 {
-                moveRunner(toCol: runner.col, row: runner.row - 1)
+                moveRunner(toCol: runner.col, row: runner.row - 1, &events)
                 runner.ysub = 4
             }
             runner.frame = animate(runner.frame, in: 16...17)
@@ -302,7 +302,7 @@ struct LodeRunnerGame {
             center(&runner.xsub)
             runner.ysub += 1
             if runner.ysub > 4 {
-                moveRunner(toCol: runner.col, row: runner.row + 1)
+                moveRunner(toCol: runner.col, row: runner.row + 1, &events)
                 runner.ysub = 0
             }
             runner.frame = animate(runner.frame, in: 16...17)
@@ -313,7 +313,7 @@ struct LodeRunnerGame {
             center(&runner.ysub)
             runner.xsub -= 1
             if runner.xsub < 0 {
-                moveRunner(toCol: runner.col - 1, row: runner.row)
+                moveRunner(toCol: runner.col - 1, row: runner.row, &events)
                 runner.xsub = 4
             }
             runner.frame = animate(runner.frame, in: baseAt(runner.col, runner.row) == .rope ? 3...5 : 0...2)
@@ -324,7 +324,7 @@ struct LodeRunnerGame {
             center(&runner.ysub)
             runner.xsub += 1
             if runner.xsub > 4 {
-                moveRunner(toCol: runner.col + 1, row: runner.row)
+                moveRunner(toCol: runner.col + 1, row: runner.row, &events)
                 runner.xsub = 0
             }
             runner.frame = animate(runner.frame, in: baseAt(runner.col, runner.row) == .rope ? 11...13 : 8...10)
@@ -365,12 +365,15 @@ struct LodeRunnerGame {
         return true
     }
 
-    private mutating func moveRunner(toCol col: Int, row: Int) {
+    /// Moves the runner into a new cell. Running into a guard's cell kills the runner.
+    private mutating func moveRunner(toCol col: Int, row: Int, _ events: inout [LREvent]) {
         vacate(runner.cell)
         runner.col = col
         runner.row = row
         if current[row][col] == .guardian {
             isRunnerDead = true
+            events.append(.runnerDied)
+            return
         }
         current[row][col] = .runner
     }
@@ -548,8 +551,9 @@ struct LodeRunnerGame {
         guardian.actor = actor
 
         if target != actor.cell {
+            let vacated = actor.cell
             if !enterCell(&guardian, index: index, target, &events) { return }
-            carryGold(&guardian, index: index, &events)
+            carryGold(&guardian, index: index, vacated: vacated, &events)
         }
 
         // pick up gold at the cell centre (7.4)
@@ -615,14 +619,13 @@ struct LodeRunnerGame {
 
     // MARK: Gold carried by guards (7.5)
 
-    private mutating func carryGold(_ guardian: inout Guard, index: Int, _ events: inout [LREvent]) {
+    /// Counts a carrying guard's moves into new cells and drops the gold in the cell it just left (`vacated`, beside
+    /// or above/below it: a guard on a ladder leaves cells vertically, whichever way it faces), if there is room.
+    private mutating func carryGold(_ guardian: inout Guard, index: Int, vacated dropCell: LRCellPosition, _ events: inout [LREvent]) {
         guard guardian.carriesGold else { return }
         guardian.state += 1
         guard guardian.state == 0 else { return }
 
-        // drop it in the cell just left, if there is room
-        let left = LRCellPosition(col: guardian.actor.col - (guardian.actor.facing == .left ? -1 : 1), row: guardian.actor.row)
-        let dropCell = (0..<Self.columns).contains(left.col) ? left : guardian.actor.cell
         if baseAt(dropCell.col, dropCell.row) == .empty, currentAt(dropCell.col, dropCell.row) == .empty {
             base[dropCell.row][dropCell.col] = .gold
             current[dropCell.row][dropCell.col] = .gold

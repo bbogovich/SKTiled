@@ -25,6 +25,9 @@ import ImageIO
 import Observation
 import SpriteKit
 import SKTiled
+#if os(macOS)
+import AppKit
+#endif
 
 
 /// A map the demo can open.
@@ -52,6 +55,13 @@ struct MapInfo {
     let tiles: Int
     let objects: Int
     let loadTime: TimeInterval
+}
+
+
+/// A message shown once in an alert.
+struct Notice {
+    let title: String
+    let message: String
 }
 
 
@@ -89,6 +99,9 @@ final class DemoModel {
     /// Description of the last load failure.
     private(set) var errorMessage: String?
 
+    /// A message shown once in an alert, e.g. when an opened folder has no maps; cleared when dismissed.
+    var notice: Notice?
+
     /// Tile coordinate under the pointer, if it is over the map.
     private(set) var hoveredCoordinate: CGPoint?
 
@@ -121,8 +134,8 @@ final class DemoModel {
         if let maps = Bundle.main.resourceURL?.appendingPathComponent("Maps") {
             bundledMaps = Self.findMaps(in: maps, bundle: .main)
         }
+        // loads the map: with @Observable, `selection`'s didSet runs even for this assignment in init
         selection = bundledMaps.first?.id
-        loadSelection()
     }
 
     // MARK: - Maps
@@ -143,18 +156,45 @@ final class DemoModel {
     }
 
     /// Lists the maps in a folder the user picked. Tilesets and images may be anywhere inside it.
+    ///
+    /// A folder without maps leaves the current folder and map as they are, and is reported in `notice`.
     func openFolder(_ folder: URL) {
-        accessedFolder?.stopAccessingSecurityScopedResource()
-        accessedFolder = folder.startAccessingSecurityScopedResource() ? folder : nil
+        let accessing = folder.startAccessingSecurityScopedResource()
+        let maps = Self.findMaps(in: folder, bundle: nil)
+        guard let first = maps.first else {
+            if accessing { folder.stopAccessingSecurityScopedResource() }
+            notice = Notice(title: "No Maps Found", message: "\"\(folder.lastPathComponent)\" contains no .tmx maps.")
+            return
+        }
 
+        accessedFolder?.stopAccessingSecurityScopedResource()
+        accessedFolder = accessing ? folder : nil
         folderName = folder.lastPathComponent
-        folderMaps = Self.findMaps(in: folder, bundle: nil)
-        if let first = folderMaps.first {
-            selection = first.id
-        } else {
-            errorMessage = "\"\(folder.lastPathComponent)\" contains no .tmx maps."
+        folderMaps = maps
+        selection = first.id
+    }
+
+    #if os(macOS)
+    /// Bundle identifier of the Tiled map editor.
+    private static let tiledBundleIdentifier = "org.mapeditor.Tiled"
+
+    /// Opens a map in the Tiled app, to compare its rendering with SKTiled's.
+    func openInTiled(_ id: MapEntry.ID) {
+        guard let entry = allMaps.first(where: { $0.id == id }) else { return }
+        guard let tiled = NSWorkspace.shared.urlForApplication(withBundleIdentifier: Self.tiledBundleIdentifier) else {
+            notice = Notice(title: "Tiled Not Found", message: "Install Tiled from mapeditor.org to open maps in it.")
+            return
+        }
+        let configuration = NSWorkspace.OpenConfiguration()
+        configuration.activates = true
+        NSWorkspace.shared.open([entry.url], withApplicationAt: tiled, configuration: configuration) { _, error in
+            guard let error else { return }
+            Task { @MainActor in
+                self.notice = Notice(title: "Couldn't Open in Tiled", message: error.localizedDescription)
+            }
         }
     }
+    #endif
 
     /// Loads the selected map into the scene.
     private func loadSelection() {
