@@ -35,46 +35,43 @@ import Cocoa
 #endif
 
 
-/**
- 
- ## Overview
- 
- Subclass of `SKTiledLayerObject`, the tile layer is a container for an array of tiles (sprites). Tiles maintain a link to the map's tileset via their `SKTilesetData` property.
- 
- 
- ### Properties
- 
- | Property                  | Description                                            |
- |---------------------------|--------------------------------------------------------|
- | tileCount                 | Returns a count of valid tiles.                        |
- 
- 
- ### Instance Methods ###
- 
- | Method                    | Description                                            |
- |---------------------------|--------------------------------------------------------|
- | getTiles()                | Returns an array of current tiles.                     |
- | getTiles(ofType:)         | Returns tiles of the given type.                       |
- | getTiles(globalID:)       | Returns all tiles matching a global id.                |
- | getTilesWithProperty(_:_) | Returns tiles matching the given property & value.     |
- | animatedTiles()           | Returns all animated tiles.                            |
- | getTileData(globalID:)    | Returns all tiles matching a global id.                |
- | tileAt(coord:)            | Returns a tile at the given coordinate, if one exists. |
- 
- ### Usage
- 
- Accessing a tile at a given coordinate:
- 
- ```swift
- let tile = tileLayer.tileAt(2, 6)!
- ```
- 
- Query tiles of a certain type:
- 
- ```swift
- let floorTiles = tileLayer.getTiles(ofType: "Floor")
- ```
- */
+/// ## Overview
+///
+/// Subclass of `SKTiledLayerObject`, the tile layer is a container for an array of tiles (sprites). Tiles maintain a link to the map's tileset via their `SKTilesetData` property.
+///
+///
+/// ### Properties
+///
+/// | Property                  | Description                                            |
+/// |---------------------------|--------------------------------------------------------|
+/// | tileCount                 | Returns a count of valid tiles.                        |
+///
+///
+/// ### Instance Methods ###
+///
+/// | Method                    | Description                                            |
+/// |---------------------------|--------------------------------------------------------|
+/// | getTiles()                | Returns an array of current tiles.                     |
+/// | getTiles(ofType:)         | Returns tiles of the given type.                       |
+/// | getTiles(globalID:)       | Returns all tiles matching a global id.                |
+/// | getTilesWithProperty(_:_) | Returns tiles matching the given property & value.     |
+/// | animatedTiles()           | Returns all animated tiles.                            |
+/// | getTileData(globalID:)    | Returns all tiles matching a global id.                |
+/// | tileAt(coord:)            | Returns a tile at the given coordinate, if one exists. |
+///
+/// ### Usage
+///
+/// Accessing a tile at a given coordinate:
+///
+/// ```swift
+/// let tile = tileLayer.tileAt(2, 6)!
+/// ```
+///
+/// Query tiles of a certain type:
+///
+/// ```swift
+/// let floorTiles = tileLayer.getTiles(ofType: "Floor")
+/// ```
 public class SKTileLayer: SKTiledLayerObject {
     
     fileprivate typealias TilesArray = Array2D<SKTile>
@@ -131,34 +128,23 @@ public class SKTileLayer: SKTiledLayerObject {
         }
     }
     
-    override public var speed: CGFloat {
-        didSet {
-            guard oldValue != speed else { return }
-            self.getTiles().forEach { $0.speed = speed }
-        }
-    }
-    
     // MARK: - Init
-    /**
-     Initialize with layer name and parent `SKTilemap`.
-     
-     - parameter layerName:    `String` layer name.
-     - parameter tilemap:      `SKTilemap` parent map.
-     */
+    /// Initialize with layer name and parent `SKTilemap`.
+    ///
+    /// - parameter layerName:    `String` layer name.
+    /// - parameter tilemap:      `SKTilemap` parent map.
     override public init(layerName: String, tilemap: SKTilemap) {
         self.tiles = TilesArray(columns: Int(tilemap.size.width), rows: Int(tilemap.size.height))
         super.init(layerName: layerName, tilemap: tilemap)
         self.layerType = .tile
     }
     
-    /**
-     Initialize with parent `SKTilemap` and layer attributes.
-     
-     **Do not use this intializer directly**
-     
-     - parameter tilemap:      `SKTilemap` parent map.
-     - parameter attributes:   `[String: String]` layer attributes.
-     */
+    /// Initialize with parent `SKTilemap` and layer attributes.
+    ///
+    /// **Do not use this intializer directly**
+    ///
+    /// - parameter tilemap:      `SKTilemap` parent map.
+    /// - parameter attributes:   `[String: String]` layer attributes.
     public init?(tilemap: SKTilemap, attributes: [String: String]) {
         // name, width and height are required
         guard let layerName = attributes["name"] else { return nil }
@@ -173,75 +159,60 @@ public class SKTileLayer: SKTiledLayerObject {
     
     // MARK: - Tiles
     
-    /**
-     Returns a tile at the given coordinate, if one exists.
-     
-     - parameter x: `Int` y-coordinate.
-     - parameter y: `Int` x-coordinate.
-     - returns: `SKTile?` tile object, if it exists.
-     */
+    /// Returns a tile at the given coordinate, if one exists.
+    ///
+    /// - parameter x: `Int` y-coordinate.
+    /// - parameter y: `Int` x-coordinate.
+    /// - returns: `SKTile?` tile object, if it exists.
     public func tileAt(_ x: Int, _ y: Int) -> SKTile? {
         if isValid(x, y) == false { return nil }
         return tiles[x,y]
     }
     
-    /**
-     Returns a tile at the given coordinate, if one exists.
-     
-     - parameter coord:   `CGPoint` tile coordinate.
-     - returns: `SKTile?` tile object, if it exists.
-     */
+    /// Returns a tile at the given coordinate, if one exists.
+    ///
+    /// - parameter coord:   `CGPoint` tile coordinate.
+    /// - returns: `SKTile?` tile object, if it exists.
     public func tileAt(coord: CGPoint) -> SKTile? {
         return tileAt(Int(coord.x), Int(coord.y))
     }
     
-    /**
-     Returns a tile at the given screen position, if one exists.
-     
-     - parameter point:  `CGPoint` screen point.
-     - parameter offset: `CGPoint` pixel offset.
-     - returns: `SKTile?` tile object, if it exists.
-     */
+    /// Returns a tile at the given screen position, if one exists.
+    ///
+    /// - parameter point:  `CGPoint` screen point.
+    /// - parameter offset: `CGPoint` pixel offset.
+    /// - returns: `SKTile?` tile object, if it exists.
     public func tileAt(point:  CGPoint, offset: CGPoint = CGPoint.zero) -> SKTile? {
         let coord = coordinateForPoint(point)
         return tileAt(coord: coord)
     }
     
-    /**
-     Returns an array of current tiles.
-     
-     - returns: `[SKTile]` array of tiles.
-     */
+    /// Returns an array of current tiles.
+    ///
+    /// - returns: `[SKTile]` array of tiles.
     public func getTiles() -> [SKTile] {
         return tiles.compactMap { $0 }
     }
     
-    /**
-     Returns tiles with a property of the given type.
-     
-     - parameter ofType: `String` type.
-     - returns: `[SKTile]` array of tiles.
-     */
+    /// Returns tiles with a property of the given type.
+    ///
+    /// - parameter ofType: `String` type.
+    /// - returns: `[SKTile]` array of tiles.
     public func getTiles(ofType: String) -> [SKTile] {
         return tiles.compactMap { $0 }.filter { $0.tileData.type == ofType }
     }
     
-    /**
-     Returns tiles matching the given global id.
-     
-     - parameter globalID: `Int` tile global id.
-     - returns: `[SKTile]` array of tiles.
-     */
+    /// Returns tiles matching the given global id.
+    ///
+    /// - parameter globalID: `Int` tile global id.
+    /// - returns: `[SKTile]` array of tiles.
     public func getTiles(globalID: Int) -> [SKTile] {
         return tiles.compactMap { $0 }.filter { $0.tileData.globalID == globalID }
     }
     
-    /**
-     Returns tiles with a property of the given type.
-     
-     - parameter type: `String` type.
-     - returns: `[SKTile]` array of tiles.
-     */
+    /// Returns tiles with a property of the given type.
+    ///
+    /// - returns: `[SKTile]` array of tiles.
     public func getTilesWithProperty(_ named: String, _ value: Any) -> [SKTile] {
         var result: [SKTile] = []
         for tile in tiles where tile != nil {
@@ -254,31 +225,24 @@ public class SKTileLayer: SKTiledLayerObject {
         return result
     }
     
-    /**
-     Returns all tiles with animation.
-     
-     - returns: `[SKTile]` array of animated tiles.
-     */
+    /// Returns all tiles with animation.
+    ///
+    /// - returns: `[SKTile]` array of animated tiles.
     public func animatedTiles() -> [SKTile] {
         return getTiles().filter { $0.tileData.isAnimated == true }
     }
     
-    /**
-     Return tile data from a global id.
-     
-     - parameter globalID: `Int` global tile id.
-     - returns: `SKTilesetData?` tile data (for valid id).
-     */
+    /// Return tile data from a global id.
+    ///
+    /// - parameter gid: `Int` global tile id.
+    /// - returns: `SKTilesetData?` tile data (for valid id).
     public func getTileData(globalID gid: Int) -> SKTilesetData? {
         return tilemap.getTileData(globalID: gid)
     }
     
-    /**
-     Returns tiles with a property of the given type.
-     
-     - parameter type: `String` type.
-     - returns: `[SKTile]` array of tiles.
-     */
+    /// Returns tiles with a property of the given type.
+    ///
+    /// - returns: `[SKTile]` array of tiles.
     public func getTileData(withProperty named: String) -> [SKTilesetData] {
         var result: [SKTilesetData] = []
         for tile in tiles where tile != nil {
@@ -291,13 +255,11 @@ public class SKTileLayer: SKTiledLayerObject {
     
     // MARK: - Layer Data
     
-    /**
-     Add tile data array to the layer and render it.
-     
-     - parameter data:  `[UInt32]` tile data.
-     - parameter debug: `Bool` debug mode.
-     - returns: `Bool` data was successfully added.
-     */
+    /// Add tile data array to the layer and render it.
+    ///
+    /// - parameter data:  `[UInt32]` tile data.
+    /// - parameter debug: `Bool` debug mode.
+    /// - returns: `Bool` data was successfully added.
     @discardableResult
     public func setLayerData(_ data: [UInt32], debug: Bool = false) -> Bool {
         if !(data.count == size.pointCount) {
@@ -331,25 +293,18 @@ public class SKTileLayer: SKTiledLayerObject {
         return errorCount == 0
     }
     
-    /**
-     Clear the layer of tiles.
-     */
+    /// Clear the layer of tiles.
     public func clearLayer() {
-        self.tiles.forEach { tile in
-            tile?.removeFromParent()
-        }
-        self.tiles = TilesArray(columns: Int(tilemap.size.width), rows: Int(tilemap.size.height))
+        clearTiles()
     }
     
-    /**
-     Build an empty tile at the given coordinates. Returns an existing tile if one already exists,
-     or nil if the coordinate is invalid.
-     
-     - parameter coord:     `CGPoint` tile coordinate
-     - parameter gid:       `Int?` tile id.
-     - parameter tileType:  `String` optional tile class name.
-     - returns: `SKTile?` tile.
-     */
+    /// Build an empty tile at the given coordinates. Returns an existing tile if one already exists,
+    /// or nil if the coordinate is invalid.
+    ///
+    /// - parameter coord:     `CGPoint` tile coordinate
+    /// - parameter gid:       `Int?` tile id.
+    /// - parameter tileType:  `String` optional tile class name.
+    /// - returns: `SKTile?` tile.
     public func addTileAt(coord: CGPoint,
                           gid: Int? = nil,
                           tileType: String? = nil) -> SKTile? {
@@ -361,7 +316,9 @@ public class SKTileLayer: SKTiledLayerObject {
         // remove the current tile
         let existingTile = removeTileAt(coord: coord)
         
-        let tileData: SKTilesetData? = (gid != nil) ? getTileData(globalID: gid!) : nil
+        // strip any flip flags from the gid
+        let tileAttrs = gid.map { flippedTileFlags(id: UInt32(truncatingIfNeeded: $0)) }
+        let tileData: SKTilesetData? = tileAttrs.flatMap { getTileData(globalID: Int($0.gid)) }
         
         let Tile = (tilemap.delegate != nil) ? tilemap.delegate!.objectForTileType(named: tileType) : SKTile.self
         let tile = Tile.init()
@@ -372,6 +329,12 @@ public class SKTileLayer: SKTiledLayerObject {
             tile.texture = tileData.texture
             tile.tileSize = (tileData.tileset != nil) ? tileData.tileset!.tileSize : self.tileSize
         }
+
+        if let tileAttrs = tileAttrs {
+            tile.flipHoriz = tileAttrs.hflip
+            tile.flipVert  = tileAttrs.vflip
+            tile.flipDiag  = tileAttrs.dflip
+        }
         
         // set the tile overlap amount
         tile.setTileOverlap(tilemap.tileOverlap)
@@ -381,8 +344,14 @@ public class SKTileLayer: SKTiledLayerObject {
         tile.layer = self
         self.tiles[Int(coord.x), Int(coord.y)] = tile
         
-        // get the position in the layer (plus tileset offset)
-        let tilePosition = pointForCoordinate(coord: coord, offsetX: offset.x, offsetY: offset.y)
+        // set orientation & anchor point from the tile data
+        if (tileData?.tileset != nil) {
+            tile.orientTile()
+        }
+        
+        // get the position in the layer, plus the tileset offset (the layer offset is applied to the layer node)
+        let tileOffset = tileData?.tileset?.tileOffset ?? CGPoint.zero
+        let tilePosition = pointForCoordinate(coord: coord, offsetX: tileOffset.x, offsetY: tileOffset.y)
         tile.position = tilePosition
         
         if let currentTile = existingTile {
@@ -393,25 +362,20 @@ public class SKTileLayer: SKTiledLayerObject {
         addChild(tile)
         
         // add to tile cache
-        NotificationCenter.default.post(
-            name: Notification.Name.Layer.TileAdded,
-            object: tile,
-            userInfo: ["layer": self, "coord": coord]
-        )
-        
+        tilemap?.dataStorage?.tileAdded(tile)
+
         // force tile redraw
         tile.draw()
         return tile
     }
     
-    /**
-     Build an empty tile at the given coordinates with a custom texture. Returns `nil` if the coordinate
-     is invalid.
-     
-     - parameter coord:   `CGPoint` tile coordinate.
-     - parameter texture: `SKTexture?` optional tile texture.
-     - returns: `SKTile?` tile.
-     */
+    /// Build an empty tile at the given coordinates with a custom texture. Returns `nil` if the coordinate
+    /// is invalid.
+    ///
+    /// - parameter coord:   `CGPoint` tile coordinate.
+    /// - parameter texture: `SKTexture?` optional tile texture.
+    /// - parameter tileType: `String?` optional tile type.
+    /// - returns: `SKTile?` tile.
     public func addTileAt(coord: CGPoint,
                           texture: SKTexture? = nil,
                           tileType: String? = nil) -> SKTile? {
@@ -419,13 +383,16 @@ public class SKTileLayer: SKTiledLayerObject {
         guard isValid(coord: coord) else {
             return nil
         }
-        
+
+        // remove the current tile
+        let existingTile = removeTileAt(coord: coord)
+
         let Tile = (tilemap.delegate != nil) ? tilemap.delegate!.objectForTileType(named: tileType) : SKTile.self
         let tile = Tile.init()
-        
+
         tile.tileSize = tileSize
         tile.texture = texture
-        
+
         // set the tile overlap amount
         tile.setTileOverlap(tilemap.tileOverlap)
         tile.highlightColor = highlightColor
@@ -434,96 +401,107 @@ public class SKTileLayer: SKTiledLayerObject {
         tile.layer = self
         self.tiles[Int(coord.x), Int(coord.y)] = tile
         
-        // get the position in the layer (plus tileset offset)
-        let tilePosition = pointForCoordinate(coord: coord, offsetX: offset.x, offsetY: offset.y)
+        // get the position in the layer (the layer offset is applied to the layer node)
+        let tilePosition = pointForCoordinate(coord: coord)
         tile.position = tilePosition
+
+        if let currentTile = existingTile {
+            tile.zPosition = currentTile.zPosition
+            tile.zRotation = currentTile.zRotation
+        }
+
         addChild(tile)
-        
+
         // add to tile cache
-        NotificationCenter.default.post(
-            name: Notification.Name.Layer.TileAdded,
-            object: tile,
-            userInfo: ["layer": self, "coord": coord]
-        )
-        
+        tilemap?.dataStorage?.tileAdded(tile)
+
         // force tile redraw
         tile.draw()
         return tile
     }
     
-    /**
-     Build an empty tile at the given coordinates. Returns an existing tile if one already exists,
-     or nil if the coordinate is invalid.
-     
-     - parameter x:   `Int` x-coordinate
-     - parameter y:   `Int` y-coordinate
-     - parameter gid: `Int?` tile id.
-     - returns: `SKTile?` tile.
-     */
+    /// Build an empty tile at the given coordinates. Returns an existing tile if one already exists,
+    /// or nil if the coordinate is invalid.
+    ///
+    /// - parameter x:   `Int` x-coordinate
+    /// - parameter y:   `Int` y-coordinate
+    /// - parameter gid: `Int?` tile id.
+    /// - returns: `SKTile?` tile.
     public func addTileAt(_ x: Int, _ y: Int, gid: Int? = nil) -> SKTile? {
         let coord = CGPoint(x: CGFloat(x), y: CGFloat(y))
         return addTileAt(coord: coord, gid: gid)
     }
     
-    /**
-     Build an empty tile at the given coordinates with a custom texture. Returns nil is the coordinate
-     is invalid.
-     
-     - parameter x:       `Int` x-coordinate
-     - parameter y:       `Int` y-coordinate
-     - parameter texture: `SKTexture?` optional tile texture.
-     - returns: `SKTile?` tile.
-     */
+    /// Build an empty tile at the given coordinates with a custom texture. Returns nil is the coordinate
+    /// is invalid.
+    ///
+    /// - parameter x:       `Int` x-coordinate
+    /// - parameter y:       `Int` y-coordinate
+    /// - parameter texture: `SKTexture?` optional tile texture.
+    /// - returns: `SKTile?` tile.
     public func addTileAt(_ x: Int, _ y: Int, texture: SKTexture? = nil) -> SKTile? {
         let coord = CGPoint(x: CGFloat(x), y: CGFloat(y))
         return addTileAt(coord: coord, texture: texture)
     }
     
-    /**
-     Remove the tile at a given x/y coordinates.
-     
-     - parameter x:   `Int` x-coordinate
-     - parameter y:   `Int` y-coordinate
-     - returns: `SKTile?` removed tile.
-     */
+    /// Remove the tile at a given x/y coordinates.
+    ///
+    /// - parameter x:   `Int` x-coordinate
+    /// - parameter y:   `Int` y-coordinate
+    /// - returns: `SKTile?` removed tile.
     public func removeTileAt(_ x: Int, _ y: Int) -> SKTile? {
         let coord = CGPoint(x: CGFloat(x), y: CGFloat(y))
         return removeTileAt(coord: coord)
     }
     
-    /**
-     Clear all tiles.
-     */
+    /// Clear all tiles.
     public func clearTiles() {
-        self.tiles.forEach { tile in
-            tile?.removeAnimation()
-            tile?.removeFromParent()
+        let currentTiles = getTiles()
+        currentTiles.forEach { tile in
+            tile.removeAnimation()
+            tile.removeFromParent()
         }
+        removeTilesFromDataStorage(currentTiles)
         self.tiles = TilesArray(columns: Int(tilemap.size.width), rows: Int(tilemap.size.height))
     }
     
-    /**
-     Remove the tile at a given coordinate.
-     
-     - parameter coord:   `CGPoint` tile coordinate.
-     - returns: `SKTile?` removed tile.
-     */
+    /// Removes tiles from the map's tile storage in one pass over the caches.
+    ///
+    /// - parameter tilesToRemove: `[SKTile]` tiles to remove.
+    internal func removeTilesFromDataStorage(_ tilesToRemove: [SKTile]) {
+        guard let dataStorage = tilemap?.dataStorage, (tilesToRemove.isEmpty == false) else { return }
+        if (tilesToRemove.count == 1) {
+            dataStorage.tileRemoved(tilesToRemove[0])
+            return
+        }
+        let removedIDs = Set(tilesToRemove.map { ObjectIdentifier($0) })
+        for list in dataStorage.staticTileCache.values {
+            list.array.removeAll { removedIDs.contains(ObjectIdentifier($0)) }
+        }
+        for list in dataStorage.animatedTileCache.values {
+            list.array.removeAll { removedIDs.contains(ObjectIdentifier($0)) }
+        }
+    }
+    
+    /// Remove the tile at a given coordinate.
+    ///
+    /// - parameter coord:   `CGPoint` tile coordinate.
+    /// - returns: `SKTile?` removed tile.
     public func removeTileAt(coord: CGPoint) -> SKTile? {
         let current = tileAt(coord: coord)
         if let current = current {
             current.removeFromParent()
             self.tiles[Int(coord.x), Int(coord.y)] = nil
+            tilemap?.dataStorage?.tileRemoved(current)
         }
         return current
     }
     
-    /**
-     Build a tile at the given coordinate with the given id. Returns nil if the id cannot be resolved.
-     
-     - parameter coord:    `CGPoint` x&y coordinate.
-     - parameter id:       `UInt32` tile id.
-     - returns: `SKTile?`  tile object.
-     */
+    /// Build a tile at the given coordinate with the given id. Returns nil if the id cannot be resolved.
+    ///
+    /// - parameter coord:    `CGPoint` x&y coordinate.
+    /// - parameter id:       `UInt32` tile id.
+    /// - returns: `SKTile?`  tile object.
     fileprivate func buildTileAt(coord: CGPoint, id: UInt32) -> SKTile? {
         
         // get tile attributes from the current id
@@ -533,15 +511,15 @@ public class SKTileLayer: SKTiledLayerObject {
         
         if let tileData = tilemap.getTileData(globalID: globalId) {
             
-            // set the tile data flip flags
-            tileData.flipHoriz = tileAttrs.hflip
-            tileData.flipVert  = tileAttrs.vflip
-            tileData.flipDiag  = tileAttrs.dflip
-            
             // get tile object from delegate
             let Tile = (tilemap.delegate != nil) ? tilemap.delegate!.objectForTileType(named: tileData.type) : SKTile.self
             
             if let tile = Tile.init(data: tileData) {
+                
+                // set the flip flags for this tile
+                tile.flipHoriz = tileAttrs.hflip
+                tile.flipVert  = tileAttrs.vflip
+                tile.flipDiag  = tileAttrs.dflip
                 
                 // set the tile overlap amount
                 tile.setTileOverlap(tilemap.tileOverlap)
@@ -572,12 +550,8 @@ public class SKTileLayer: SKTiledLayerObject {
                 }
                 
                 // add to tile cache
-                NotificationCenter.default.post(
-                    name: Notification.Name.Layer.TileAdded,
-                    object: tile,
-                    userInfo: ["layer": self]
-                )
-                
+                tilemap?.dataStorage?.tileAdded(tile)
+
                 return tile
                 
             } else {
@@ -593,36 +567,72 @@ public class SKTileLayer: SKTiledLayerObject {
         return nil
     }
     
-    /**
-     Set a tile at the given coordinate.
-     
-     - parameter x:   `Int` x-coordinate
-     - parameter y:   `Int` y-coordinate
-     - returns: `SKTile?` tile.
-     */
+    /// Place a tile at the given coordinate, replacing (and removing) the current tile there.
+    ///
+    /// - parameter x:   `Int` x-coordinate
+    /// - parameter y:   `Int` y-coordinate
+    /// - parameter tile: `SKTile?` tile to place, or `nil` to remove the current tile.
+    /// - returns: `SKTile?` the placed tile, or `nil` if the coordinate is invalid or `tile` is `nil`.
     public func setTile(_ x: Int, _ y: Int, tile: SKTile? = nil) -> SKTile? {
-        self.tiles[x, y] = tile
-        return tile
+        return setTile(at: CGPoint(x: CGFloat(x), y: CGFloat(y)), tile: tile)
     }
     
-    /**
-     Set a tile at the given coordinate.
-     
-     - parameter coord:   `CGPoint` tile coordinate.
-     - returns: `SKTile?` tile.
-     */
+    /// Place a tile at the given coordinate, replacing (and removing) the current tile there.
+    ///
+    /// - parameter coord:   `CGPoint` tile coordinate.
+    /// - parameter tile: `SKTile?` tile to place, or `nil` to remove the current tile.
+    /// - returns: `SKTile?` the placed tile, or `nil` if the coordinate is invalid or `tile` is `nil`.
     public func setTile(at coord: CGPoint, tile: SKTile? = nil) -> SKTile? {
+        guard isValid(coord: coord) else {
+            return nil
+        }
+        
+        // already placed here
+        if let tile = tile, (tileAt(coord: coord) === tile) {
+            return tile
+        }
+        
+        // remove the current tile
+        let existingTile = removeTileAt(coord: coord)
+        
+        guard let tile = tile else {
+            return nil
+        }
+        
+        // detach the tile from wherever it was before
+        if (tile.parent != nil) {
+            tile.removeFromParent()
+            tilemap?.dataStorage?.tileRemoved(tile)
+        }
+        
+        tile.layer = self
         self.tiles[Int(coord.x), Int(coord.y)] = tile
+        
+        // set orientation & anchor point from the tile data
+        if (tile.tileData.tileset != nil) {
+            tile.orientTile()
+        }
+        
+        // position in the layer, plus the tileset offset
+        let tileOffset = tile.tileData.tileset?.tileOffset ?? CGPoint.zero
+        tile.position = pointForCoordinate(coord: coord, offsetX: tileOffset.x, offsetY: tileOffset.y)
+        
+        if let currentTile = existingTile {
+            tile.zPosition = currentTile.zPosition
+        }
+        
+        addChild(tile)
+        
+        // add to tile cache
+        tilemap?.dataStorage?.tileAdded(tile)
         return tile
     }
     
     // MARK: - Overlap
     
-    /**
-     Set the tile overlap. Only accepts a value between 0 - 1.0
-     
-     - parameter overlap: `CGFloat` tile overlap value.
-     */
+    /// Set the tile overlap. Only accepts a value between 0 - 1.0
+    ///
+    /// - parameter overlap: `CGFloat` tile overlap value.
     public func setTileOverlap(_ overlap: CGFloat) {
         for tile in tiles where tile != nil {
             tile!.setTileOverlap(overlap)
@@ -630,24 +640,20 @@ public class SKTileLayer: SKTiledLayerObject {
     }
     
     // MARK: - Callbacks
-    /**
-     Called when the layer is finished rendering.
-     
-     - parameter duration: `TimeInterval` fade-in duration.
-     */
+    /// Called when the layer is finished rendering.
+    ///
+    /// - parameter duration: `TimeInterval` fade-in duration.
     override public func didFinishRendering(duration: TimeInterval = 0) {
         super.didFinishRendering(duration: duration)
     }
     
     // MARK: - Shaders
     
-    /**
-     Set a shader for tiles in this layer.
-     
-     - parameter for:      `[SKTile]` tiles to apply shader to.
-     - parameter named:    `String` shader file name.
-     - parameter uniforms: `[SKUniform]` array of shader uniforms.
-     */
+    /// Set a shader for tiles in this layer.
+    ///
+    /// - parameter sktiles:      `[SKTile]` tiles to apply shader to.
+    /// - parameter named:    `String` shader file name.
+    /// - parameter uniforms: `[SKUniform]` array of shader uniforms.
     public func setShader(for sktiles: [SKTile], named: String, uniforms: [SKUniform] = []) {
         let shader = SKShader(fileNamed: named)
         shader.uniforms = uniforms
@@ -657,9 +663,7 @@ public class SKTileLayer: SKTiledLayerObject {
     }
     
     // MARK: - Debugging
-    /**
-     Visualize the layer's boundary shape.
-     */
+    /// Visualize the layer's boundary shape.
     override public func drawBounds() {
         tiles.compactMap{ $0 }.forEach { $0.drawBounds() }
         super.drawBounds()
@@ -674,9 +678,7 @@ public class SKTileLayer: SKTiledLayerObject {
     
     // MARK: - Updating: Tile Layer
     
-    /**
-     Run animation actions on all tiles layer.
-     */
+    /// Run animation actions on all tiles layer.
     override public func runAnimationAsActions() {
         super.runAnimationAsActions()
         let animatedTiles = getTiles().filter { tile in
@@ -685,11 +687,9 @@ public class SKTileLayer: SKTiledLayerObject {
         animatedTiles.forEach { $0.runAnimationAsActions() }
     }
     
-    /**
-     Remove tile animations.
-     
-     - parameter restore: `Bool` restore tile/obejct texture.
-     */
+    /// Remove tile animations.
+    ///
+    /// - parameter restore: `Bool` restore tile/obejct texture.
     override public func removeAnimationActions(restore: Bool = false) {
         super.removeAnimationActions(restore: restore)
         let animatedTiles = getTiles().filter { tile in
@@ -698,11 +698,9 @@ public class SKTileLayer: SKTiledLayerObject {
         animatedTiles.forEach { $0.removeAnimationActions(restore: restore) }
     }
     
-    /**
-     Update the tile layer before each frame is rendered.
-     
-     - parameter currentTime: `TimeInterval` update interval.
-     */
+    /// Update the tile layer before each frame is rendered.
+    ///
+    /// - parameter currentTime: `TimeInterval` update interval.
     override public func update(_ currentTime: TimeInterval) {
         super.update(currentTime)
         guard (self.updateMode != TileUpdateMode.actions) else { return }
@@ -748,54 +746,46 @@ extension SKTiledLayerObject {
         }
     }
     
-    /**
-     Add a node at the given coordinates. By default, the zPositon
-     will be higher than all of the other nodes in the layer.
-     
-     - parameter node:      `SKNode` object.
-     - parameter x:         `Int` x-coordinate.
-     - parameter y:         `Int` y-coordinate.
-     - parameter dx:        `CGFloat` offset x-amount.
-     - parameter dy:        `CGFloat` offset y-amount.
-     - parameter zpos:      `CGFloat?` optional z-position.
-     */
+    /// Add a node at the given coordinates. By default, the zPositon
+    /// will be higher than all of the other nodes in the layer.
+    ///
+    /// - parameter node:      `SKNode` object.
+    /// - parameter x:         `Int` x-coordinate.
+    /// - parameter y:         `Int` y-coordinate.
+    /// - parameter dx:        `CGFloat` offset x-amount.
+    /// - parameter dy:        `CGFloat` offset y-amount.
+    /// - parameter zpos:      `CGFloat?` optional z-position.
     public func addChild(_ node: SKNode, _ x: Int, _ y: Int, dx: CGFloat = 0, dy: CGFloat = 0, zpos: CGFloat? = nil) {
         let coord = CGPoint(x: CGFloat(x), y: CGFloat(y))
         let offset = CGPoint(x: dx, y: dy)
         addChild(node, coord: coord, offset: offset, zpos: zpos)
     }
     
-    /**
-     Returns a point for a given coordinate in the layer, with optional offset values for x/y.
-     
-     - parameter x:       `Int` x-coordinate.
-     - parameter y:       `Int` y-coordinate.
-     - parameter offsetX: `CGFloat` x-offset value.
-     - parameter offsetY: `CGFloat` y-offset value.
-     - returns: `CGPoint` position in layer.
-     */
+    /// Returns a point for a given coordinate in the layer, with optional offset values for x/y.
+    ///
+    /// - parameter x:       `Int` x-coordinate.
+    /// - parameter y:       `Int` y-coordinate.
+    /// - parameter offsetX: `CGFloat` x-offset value.
+    /// - parameter offsetY: `CGFloat` y-offset value.
+    /// - returns: `CGPoint` position in layer.
     public func pointForCoordinate(_ x: Int, _ y: Int, offsetX: CGFloat = 0, offsetY: CGFloat = 0) -> CGPoint {
         return self.pointForCoordinate(coord: CGPoint(x: CGFloat(x), y: CGFloat(y)), offsetX: offsetX, offsetY: offsetY)
     }
     
-    /**
-     Returns a point for a given coordinate in the layer, with optional offset.
-     
-     - parameter coord:  `CGPoint` tile coordinate.
-     - parameter offset: `CGPoint` tile offset.
-     - returns: `CGPoint` point in layer.
-     */
+    /// Returns a point for a given coordinate in the layer, with optional offset.
+    ///
+    /// - parameter coord:  `CGPoint` tile coordinate.
+    /// - parameter offset: `CGPoint` tile offset.
+    /// - returns: `CGPoint` point in layer.
     public func pointForCoordinate(coord: CGPoint, offset: CGPoint) -> CGPoint {
         return self.pointForCoordinate(coord: coord, offsetX: offset.x, offsetY: offset.y)
     }
     
-    /**
-     Returns a point for a given coordinate in the layer, with optional offset.
-     
-     - parameter coord:  `CGPoint` tile coordinate.
-     - parameter offset: `TileOffset` tile offset hint.
-     - returns: `CGPoint` point in layer.
-     */
+    /// Returns a point for a given coordinate in the layer, with optional offset.
+    ///
+    /// - parameter coord:  `CGPoint` tile coordinate.
+    /// - parameter tileOffset: `TileOffset` tile offset hint.
+    /// - returns: `CGPoint` point in layer.
     public func pointForCoordinate(coord: CGPoint, tileOffset: SKTiledLayerObject.TileOffset = .center) -> CGPoint {
         var offset = CGPoint(x: 0, y: 0)
         switch tileOffset {
@@ -821,53 +811,47 @@ extension SKTiledLayerObject {
         return self.pointForCoordinate(coord: coord, offsetX: offset.x, offsetY: offset.y)
     }
     
-    /**
-     Returns a tile coordinate for a given vector_int2 coordinate.
-     
-     - parameter vec2:    `int2` vector int2 coordinate.
-     - parameter offsetX: `CGFloat` x-offset value.
-     - parameter offsetY: `CGFloat` y-offset value.
-     - returns: `CGPoint` position in layer.
-     */
+    /// Returns a tile coordinate for a given vector_int2 coordinate.
+    ///
+    /// - parameter vec2:    `int2` vector int2 coordinate.
+    /// - parameter offsetX: `CGFloat` x-offset value.
+    /// - parameter offsetY: `CGFloat` y-offset value.
+    /// - returns: `CGPoint` position in layer.
     public func pointForCoordinate(vec2: int2, offsetX: CGFloat = 0, offsetY: CGFloat = 0) -> CGPoint {
         return self.pointForCoordinate(coord: vec2.cgPoint, offsetX: offsetX, offsetY: offsetY)
     }
     
-    /**
-     Returns a tile coordinate for a given point in the layer.
-     
-     - parameter x:       `Int` x-position.
-     - parameter y:       `Int` y-position.
-     - returns: `CGPoint` position in layer.
-     */
+    /// Returns a tile coordinate for a given point in the layer.
+    ///
+    /// - parameter x:       `Int` x-position.
+    /// - parameter y:       `Int` y-position.
+    /// - returns: `CGPoint` position in layer.
     public func coordinateForPoint(_ x: Int, _ y: Int) -> CGPoint {
         return self.coordinateForPoint(CGPoint(x: CGFloat(x), y: CGFloat(y)))
     }
     
-    /**
-     Returns the center point of a layer.
-     */
+    /// Returns the center point of a layer.
     public var center: CGPoint {
         return CGPoint(x: (size.width / 2) - (size.width * anchorPoint.x), y: (size.height / 2) - (size.height * anchorPoint.y))
     }
     
-    /**
-     Calculate the distance from the layer's origin
-     */
+    /// Calculate the distance from the layer's origin
     public func distanceFromOrigin(_ pos: CGPoint) -> CGVector {
         let dx = (pos.x - center.x)
         let dy = (pos.y - center.y)
         return CGVector(dx: dx, dy: dy)
     }
     
-    override public var description: String {
-        let isTopLevel = self.parents.count == 1
-        let indexString = (isTopLevel == true) ? ", index: \(index)" : ""
-        let layerTypeString = (layerType != TiledLayerType.none) ? layerType.stringValue.capitalized : "Background"
-        return "\(layerTypeString) Layer: \"\(self.path)\"\(indexString), zpos: \(Int(self.zPosition))"
+    nonisolated override public var description: String {
+        MainActor.assumeIsolated {
+            let isTopLevel = self.parents.count == 1
+            let indexString = (isTopLevel == true) ? ", index: \(index)" : ""
+            let layerTypeString = (layerType != TiledLayerType.none) ? layerType.stringValue.capitalized : "Background"
+            return "\(layerTypeString) Layer: \"\(self.path)\"\(indexString), zpos: \(Int(self.zPosition))"
+        }
     }
     
-    override public var debugDescription: String { return "<\(description)>" }
+    nonisolated override public var debugDescription: String { MainActor.assumeIsolated { return "<\(description)>" } }
     
     /// Returns a value for use in a dropdown menu.
     public var menuDescription: String {
@@ -911,11 +895,9 @@ extension SKTiledLayerObject {
         return self.enumerate()
     }
     
-    /**
-     Returns an array of tiles/objects that conform to the `SKTiledGeometry` protocol.
-     
-     - returns: `[SKNode]` array of child objects.
-     */
+    /// Returns an array of tiles/objects that conform to the `SKTiledGeometry` protocol.
+    ///
+    /// - returns: `[SKNode]` array of child objects.
     public func renderableObjects() -> [SKNode] {
         var result: [SKNode] = []
         enumerateChildNodes(withName: "*") { node, _ in
@@ -941,7 +923,8 @@ extension SKTiledLayerObject {
     
     /// Returns the actual zPosition as rendered by the scene.
     internal var actualZPosition: CGFloat {
-        return (isTopLevel == true) ? zPosition : parents.reduce(zPosition, { result, parent in
+        // `parents` begins with the layer itself
+        return (isTopLevel == true) ? zPosition : parents.reduce(0, { result, parent in
             return result + parent.zPosition
         })
     }
@@ -980,11 +963,9 @@ extension SKTiledLayerObject {
                 self.anchorPoint.shortDescription, "\(Int(self.zPosition))", self.opacity.roundTo(2), graphStat]
     }
     
-    /**
-     Recursively enumerate child nodes.
-     
-     - returns: `[SKNode]` child elements.
-     */
+    /// Recursively enumerate child nodes.
+    ///
+    /// - returns: `[SKNode]` child elements.
     internal func enumerate() -> [SKNode] {
         var result: [SKNode] = [self]
         for child in children {
@@ -1028,28 +1009,24 @@ extension SKTiledLayerObject.TiledLayerType: CustomStringConvertible, CustomDebu
 
 
 
-/**
- Initialize a color with RGB Integer values (0-255).
- 
- - parameter r: `Int` red component.
- - parameter g: `Int` green component.
- - parameter b: `Int` blue component.
- - returns: `SKColor` color with given values.
- */
+/// Initialize a color with RGB Integer values (0-255).
+///
+/// - parameter r: `Int` red component.
+/// - parameter g: `Int` green component.
+/// - parameter b: `Int` blue component.
+/// - returns: `SKColor` color with given values.
 internal func SKColorWithRGB(_ r: Int, g: Int, b: Int) -> SKColor {
     return SKColor(red: CGFloat(r)/255.0, green: CGFloat(g)/255.0, blue: CGFloat(b)/255.0, alpha: 1.0)
 }
 
 
-/**
- Initialize a color with RGBA Integer values (0-255).
- 
- - parameter r: `Int` red component.
- - parameter g: `Int` green component.
- - parameter b: `Int` blue component.
- - parameter a: `Int` alpha component.
- - returns: `SKColor` color with given values.
- */
+/// Initialize a color with RGBA Integer values (0-255).
+///
+/// - parameter r: `Int` red component.
+/// - parameter g: `Int` green component.
+/// - parameter b: `Int` blue component.
+/// - parameter a: `Int` alpha component.
+/// - returns: `SKColor` color with given values.
 internal func SKColorWithRGBA(_ r: Int, g: Int, b: Int, a: Int) -> SKColor {
     return SKColor(red: CGFloat(r)/255.0, green: CGFloat(g)/255.0, blue: CGFloat(b)/255.0, alpha: CGFloat(a)/255.0)
 }
@@ -1060,24 +1037,8 @@ internal func SKColorWithRGBA(_ r: Int, g: Int, b: Int, a: Int) -> SKColor {
 
 
 extension SKTiledLayerObject {
-    @available(*, deprecated, renamed: "runAnimationAsActions")
-    /**
-     Initialize SpriteKit animation actions for the layer.
-     */
-    public func runAnimationAsAction() {
-        self.runAnimationAsActions()
-    }
 }
 
 
 extension SKTileLayer {
-    /**
-     Returns an array of valid tiles.
-     
-     - returns: `[SKTile]` array of current tiles.
-     */
-    @available(*, deprecated, message: "use `getTiles()` instead")
-    public func validTiles() -> [SKTile] {
-        return self.getTiles()
-    }
 }

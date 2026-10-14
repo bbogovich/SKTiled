@@ -30,6 +30,7 @@ import SpriteKit
 @testable import SKTiled
 
 
+@MainActor
 class CompressionTests: XCTestCase {
 
 
@@ -59,7 +60,7 @@ class CompressionTests: XCTestCase {
             (239, 1610613228),
             (298, 3221225964),
             (314, 1073741871),
-            (298, 3221225964),
+            (342, 3221225964),
             (406, 1073741893),
             (388, 139),
             (392, 399)
@@ -111,7 +112,7 @@ class CompressionTests: XCTestCase {
             (239, 1610613228),
             (298, 3221225964),
             (314, 1073741871),
-            (298, 3221225964),
+            (342, 3221225964),
             (406, 1073741893),
             (388, 139),
             (392, 399)

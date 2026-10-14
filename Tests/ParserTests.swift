@@ -31,36 +31,21 @@ import SpriteKit
 
 
 /// Test the tiled parser
+@MainActor
 class ParserTests: XCTestCase {
     
     var tilemap: SKTilemap?
     let tilemapDelegate = TestMapDelegate()
     let tilesetDelegate = TestTilesetDelegate()
-    var testBundle: Bundle!
     let tilemapName = "test-tilemap"
     
-    override func setUp() {
-        super.setUp()
-        
-        if (testBundle == nil) {
-            #if SWIFT_PACKAGE
-            testBundle = Bundle.module
-            #else
-            testBundle = Bundle(for: type(of: self))
-            #endif
-        }
-        
-        if (tilemap == nil) {
-            print("➜ loading test tilemap: \"\(tilemapName)\"...")
-            let mapurl = testBundle!.url(forResource: tilemapName, withExtension: "tmx")!
-            tilemap = SKTilemap.load(tmxFile: mapurl.path, delegate: tilemapDelegate,
-                                     tilesetDataSource: tilesetDelegate, loggingLevel: .none)
-        }
+    override func setUp() async throws {
+        try await super.setUp()
+        let mapurl = try XCTUnwrap(Bundle.module.url(forResource: tilemapName, withExtension: "tmx"))
+        tilemap = try SKTilemap.load(url: mapurl, delegate: tilemapDelegate,
+                                 tilesetDataSource: tilesetDelegate, loggingLevel: .none)
     }
 
-    override func tearDown() {
-        super.tearDown()
-    }
 
     /**
      Test the that the map can be successfull loaded.

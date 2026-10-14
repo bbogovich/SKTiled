@@ -47,97 +47,65 @@ public typealias float2 = SIMD2<Float>
 // MARK: - Global Functions
 
 
-/**
- Returns current framework version.
+// The library's own version. These are constants rather than `Bundle(for:)` lookups: under
+// Swift Package Manager the library is linked into the host, so `Bundle(for: SKTilemap.self)`
+// is the host app's bundle and would report the app's version. Keep in step with CHANGELOG.md.
 
- - returns: `String` SKTiled framework version.
- */
+/// SKTiled version string (major.minor.patch).
+private let sktiledVersionString = "2.0.0"
+
+/// SKTiled version as an integer string (`major * 1000000 + minor * 10000 + patch * 100 + build`).
+private let sktiledBuildVersionString = "2000000"
+
+/// SKTiled version suffix (ie: `beta`), or `nil` for a release.
+private let sktiledVersionSuffix: String? = nil
+
+
+/// Returns current framework version.
+///
+/// - returns: `String` SKTiled framework version.
 func getSKTiledVersion() -> String {
-    var sktiledVersion = "0"
-    if let sdkVersion = Bundle(for: SKTilemap.self).infoDictionary?["CFBundleShortVersionString"] {
-        sktiledVersion = "\(sdkVersion)"
-    }
-    return sktiledVersion
+    return sktiledVersionString
 }
 
 
-/**
- Returns current framework build version.
-
- - returns: `String` SKTiled framework build version.
- */
+/// Returns current framework build version.
+///
+/// - returns: `String` SKTiled framework build version.
 func getSKTiledBuildVersion() -> String? {
-    var buildVersion: String? = nil
-    if let bundleVersion = Bundle(for: SKTilemap.self).infoDictionary?["CFBundleVersion"] {
-        buildVersion = "\(bundleVersion)"
-    }
-    return buildVersion
+    return sktiledBuildVersionString
 }
 
-/**
- Returns current framework version suffix (ie: `beta`).
-
- - Returns: SKTiled framework version suffix.
-*/
+/// Returns current framework version suffix (ie: `beta`).
+///
+/// - Returns: SKTiled framework version suffix.
 internal func getSKTiledVersionSuffix() -> String? {
-    var versionSuffix: String?
-    if let bundleSuffixValue = Bundle(for: SKTilemap.self).infoDictionary?["CFBundleVersionSuffix"] {
-        versionSuffix = "\(bundleSuffixValue)"
-    }
-    return versionSuffix
+    return sktiledVersionSuffix
 }
 
 
-/**
- Returns current framework Swift version.
-
- - returns: `String` Swift version.
- */
+/// Returns the Swift language mode the framework was compiled with.
 internal func getSwiftVersion() -> String {
-    var swiftVersion = "5.0"
-    #if swift(>=5.5)
-    swiftVersion = "5.5"
-    #elseif swift(>=5.4)
-    swiftVersion = "5.4"
-    #elseif swift(>=5.3)
-    swiftVersion = "5.3"
-    #elseif swift(>=5.3)
-    swiftVersion = "5.3"
-    #elseif swift(>=5.2)
-    swiftVersion = "5.2"
-    #elseif swift(>=5.1)
-    swiftVersion = "5.1"
-    #elseif swift(>=5.0)
-    swiftVersion = "5.0"
-    #elseif swift(>=4.2)
-    swiftVersion = "4.2"
-    #elseif swift(>=4.1)
-    swiftVersion = "4.1"
-    #elseif swift(>=4.0)
-    swiftVersion = "4.0"
+    #if swift(>=6)
+    return "6"
     #else
-    swiftVersion = "invalid"
+    return "5"
     #endif
-    return swiftVersion
 }
 
-/**
- Dumps SKTiled framework globals to the console.
- */
+/// Dumps SKTiled framework globals to the console.
 public func SKTiledGlobals() {
     TiledGlobals.default.dumpStatistics()
 }
 
 
-/**
- Returns the device scale factor.
-
- - returns: `CGFloat` device scale.
- */
+/// Returns the device scale factor.
+///
+/// - returns: `CGFloat` device scale.
 public func getContentScaleFactor() -> CGFloat {
     var scaleFactor: CGFloat = 1.0
     #if os(macOS)
-    scaleFactor = NSScreen.main!.backingScaleFactor
+    scaleFactor = NSScreen.main?.backingScaleFactor ?? 1
     #endif
 
     #if os(iOS)
@@ -153,28 +121,23 @@ public func getContentScaleFactor() -> CGFloat {
 
 // MARK: - CPU Usage
 
-/**
- Returns a scaled double representing CPU usage.
-
- - returns: `Double` scaled percentage of CPU power used by the current app.
- */
+/// Returns a scaled double representing CPU usage.
+///
+/// - returns: `Double` scaled percentage of CPU power used by the current app.
 public func cpuUsage() -> Double {
     var kr: kern_return_t
-    var task_info_count: mach_msg_type_number_t
-
-    task_info_count = mach_msg_type_number_t(TASK_INFO_MAX)
-    var tinfo = [integer_t](repeating: 0, count: Int(task_info_count))
-
-    kr = task_info(mach_task_self_, task_flavor_t(TASK_BASIC_INFO), &tinfo, &task_info_count)
-    if kr != KERN_SUCCESS {
-        return -1
-    }
 
     var thread_list: thread_act_array_t?
     var thread_count: mach_msg_type_number_t = 0
     defer {
+        // release each thread port and the array `task_threads` allocated in our address space.
         if let thread_list = thread_list {
-            vm_deallocate(mach_task_self_, vm_address_t(UnsafePointer(thread_list).pointee), vm_size_t(thread_count))
+            for j in 0 ..< Int(thread_count) {
+                mach_port_deallocate(mach_task_self_, thread_list[j])
+            }
+            vm_deallocate(mach_task_self_,
+                          vm_address_t(bitPattern: thread_list),
+                          vm_size_t(Int(thread_count) * MemoryLayout<thread_t>.stride))
         }
     }
 
@@ -228,17 +191,16 @@ internal func convertThreadInfoToThreadBasicInfo(_ threadInfo: [integer_t]) -> t
 
 
 #if os(iOS) || os(tvOS)
-/**
- Returns an image of the given size.
-
- - parameter size:       `CGSize` size of resulting image.
- - parameter scale:      `CGFloat` scale of result (0 seems to scale 2x, using 1 seems best)
- - parameter whatToDraw: function detailing what to draw the image.
- - returns: `CGImage` result.
- */
+/// Returns an image of the given size.
+///
+/// - parameter size:       `CGSize` size of resulting image.
+/// - parameter scale:      `CGFloat` scale of result (0 seems to scale 2x, using 1 seems best)
+/// - parameter whatToDraw: function detailing what to draw the image.
+/// - returns: `CGImage` result.
 public func imageOfSize(_ size: CGSize, scale: CGFloat = 1, _ whatToDraw: (_ context: CGContext, _ bounds: CGRect, _ scale: CGFloat) -> Void) -> CGImage? {
     // create an image of size, not opaque, not scaled
     UIGraphicsBeginImageContextWithOptions(size, false, scale)
+    defer { UIGraphicsEndImageContext() }
 
     guard let context = UIGraphicsGetCurrentContext() else {
         return nil
@@ -247,26 +209,25 @@ public func imageOfSize(_ size: CGSize, scale: CGFloat = 1, _ whatToDraw: (_ con
     context.interpolationQuality = .high
     let bounds = CGRect(origin: CGPoint.zero, size: size)
     whatToDraw(context, bounds, scale)
-    let result = UIGraphicsGetImageFromCurrentImageContext()
-    UIGraphicsEndImageContext()
-    return result!.cgImage!
+    return UIGraphicsGetImageFromCurrentImageContext()?.cgImage
 }
 
 #else
 
-/**
- Returns an image of the given size.
-
- - parameter size:       `CGSize` size of resulting image.
- - parameter scale:      `CGFloat` scale of result, for macOS that should be 1.
- - parameter whatToDraw: `() -> Void` function detailing what to draw the image.
- - returns: `CGImage` result.
- */
+/// Returns an image of the given size.
+///
+/// - parameter size:       `CGSize` size of resulting image.
+/// - parameter scale:      `CGFloat` scale of result, for macOS that should be 1.
+/// - parameter whatToDraw: `() -> Void` function detailing what to draw the image.
+/// - returns: `CGImage` result.
 public func imageOfSize(_ size: CGSize, scale: CGFloat = 1, _ whatToDraw: (_ context: CGContext, _ bounds: CGRect, _ scale: CGFloat) -> Void) -> CGImage? {
     let scaledSize = size
     let image = NSImage(size: scaledSize)
     image.lockFocus()
-    let nsContext = NSGraphicsContext.current!
+    guard let nsContext = NSGraphicsContext.current else {
+        image.unlockFocus()
+        return nil
+    }
     nsContext.imageInterpolation = .medium
     let context = nsContext.cgContext
     let bounds = CGRect(origin: CGPoint.zero, size: size)
@@ -277,25 +238,27 @@ public func imageOfSize(_ size: CGSize, scale: CGFloat = 1, _ whatToDraw: (_ con
 
     // force the buffer to empty
     nsContext.flushGraphics()
-    return imageRef!
+    return imageRef
 }
 #endif
 
 
 
-/**
- Check a tile ID for. Returns the translated tile ID and the corresponding flip flags.
-
- - parameter id: `UInt32` tile ID
- - returns: tuple of global id and flip flags.
- */
+/// Check a tile ID for. Returns the translated tile ID and the corresponding flip flags.
+///
+/// All four of Tiled's flag bits are cleared from the returned `gid`, including the hexagonal
+/// 120° rotation bit (`0x10000000`), which is not otherwise reported.
+///
+/// - parameter id: `UInt32` tile ID
+/// - returns: tuple of global id and flip flags.
 public func flippedTileFlags(id: UInt32) -> (gid: UInt32, hflip: Bool, vflip: Bool, dflip: Bool) {
     // masks for tile flipping
+    let rotatedHexagonal120Flag: UInt32 = 0x10000000
     let flippedDiagonalFlag: UInt32   = 0x20000000
     let flippedVerticalFlag: UInt32   = 0x40000000
     let flippedHorizontalFlag: UInt32 = 0x80000000
 
-    let flippedAll = (flippedHorizontalFlag | flippedVerticalFlag | flippedDiagonalFlag)
+    let flippedAll = (flippedHorizontalFlag | flippedVerticalFlag | flippedDiagonalFlag | rotatedHexagonal120Flag)
     let flippedMask = ~(flippedAll)
 
     let flipHoriz: Bool = (id & flippedHorizontalFlag) != 0
@@ -319,33 +282,31 @@ public func duration(_ block: () -> Void) -> TimeInterval {
 
 // MARK: - Extensions
 
-extension Bool {
+nonisolated extension Bool {
     init<T : BinaryInteger>(_ integer: T) {
         self.init(integer != 0)
     }
 }
 
 
-extension BinaryInteger {
+nonisolated extension BinaryInteger {
     init(_ bool: Bool) {
         self = bool ? 1 : 0
     }
 }
 
 
-extension Int {
+nonisolated extension Int {
     /// returns number of digits in Int number
     public var digitCount: Int {
-        return numberOfDigits(in: self)
-    }
-
-    // private recursive method for counting digits
-    private func numberOfDigits(in number: Int) -> Int {
-        if abs(number) < 10 {
-            return 1
-        } else {
-            return 1 + numberOfDigits(in: number/10)
+        // `magnitude` is a `UInt`, so `Int.min` does not trap the way `abs(_:)` does.
+        var value = self.magnitude
+        var count = 1
+        while value >= 10 {
+            value /= 10
+            count += 1
         }
+        return count
     }
 
     public init(bitComponents : [Int]) {
@@ -365,76 +326,62 @@ extension Int {
 
 
 
-extension CGFloat {
+nonisolated extension CGFloat {
 
-    /**
-     Convert a float to radians.
-
-     - returns: `CGFloat`
-     */
+    /// Convert a float to radians.
+    ///
+    /// - returns: `CGFloat`
     internal func radians() -> CGFloat {
         let b = CGFloat(Double.pi) * (self / 180)
         return b
     }
 
-    /**
-     Convert a float to degrees.
-
-     - returns: `CGFloat`
-     */
+    /// Convert a float to degrees.
+    ///
+    /// - returns: `CGFloat`
     internal func degrees() -> CGFloat {
         return self * 180.0 / CGFloat(Double.pi)
     }
 
-    /**
-     Calculate a linear interpolation between two values.
-
-     - returns: `CGFloat`
-     */
+    /// Calculate a linear interpolation between two values.
+    ///
+    /// - returns: `CGFloat`
     internal func lerp(start: CGFloat, end: CGFloat, t: CGFloat) -> CGFloat {
         return start + (end - start) * t
     }
 
-    /**
-     Clamp the CGFloat between two values. Returns a new value.
-
-     - parameter minv: `CGFloat` min value.
-     - parameter maxv: `CGFloat` min value.
-     - returns: `CGFloat` clamped result.
-     */
+    /// Clamp the CGFloat between two values. Returns a new value.
+    ///
+    /// - parameter minv: `CGFloat` min value.
+    /// - parameter maxv: `CGFloat` min value.
+    /// - returns: `CGFloat` clamped result.
     internal func clamped(_ minv: CGFloat, _ maxv: CGFloat) -> CGFloat {
         let min = minv < maxv ? minv : maxv
         let max = minv > maxv ? minv : maxv
         return self < min ? min : (self > max ? max : self)
     }
 
-    /**
-     Clamp the current value between min & max values.
-
-     - parameter minv: `CGFloat` min value.
-     - parameter maxv: `CGFloat` min value.
-     - returns: `CGFloat` clamped result.
-     */
+    /// Clamp the current value between min & max values.
+    ///
+    /// - parameter minv: `CGFloat` min value.
+    /// - parameter maxv: `CGFloat` min value.
+    /// - returns: `CGFloat` clamped result.
     internal mutating func clamp(_ minv: CGFloat, _ maxv: CGFloat) -> CGFloat {
         self = clamped(minv, maxv)
         return self
     }
 
-    /**
-     Returns a string representation of the value rounded to the current decimals.
-
-     - parameter decimals: `Int` number of decimals to round to.
-     - returns: `String` rounded display string.
-     */
+    /// Returns a string representation of the value rounded to the current decimals.
+    ///
+    /// - parameter decimals: `Int` number of decimals to round to.
+    /// - returns: `String` rounded display string.
     internal func roundTo(_ decimals: Int = 2) -> String {
         return String(format: "%.\(String(decimals))f", self)
     }
 
-    /**
-     Returns the value rounded to the nearest .5 increment.
-
-     - returns: `CGFloat` rounded value.
-     */
+    /// Returns the value rounded to the nearest .5 increment.
+    ///
+    /// - returns: `CGFloat` rounded value.
     internal func roundToHalf() -> CGFloat {
         let scaled = self * 10.0
         let result = scaled - (scaled.truncatingRemainder(dividingBy: 5))
@@ -447,53 +394,45 @@ extension CGFloat {
 }
 
 
-/**
- Sine function that accepts angle for trig operations.
-
- - parameter degrees: `CGFloat` angle.
- - returns `CGFloat` sine result.
- */
+/// Sine function that accepts angle for trig operations.
+///
+/// - parameter degrees: `CGFloat` angle.
+/// - returns `CGFloat` sine result.
 internal func sin(degrees: CGFloat) -> CGFloat {
     return CGFloat(sin(degrees: degrees.native))
 }
 
 
-/**
- Sine function that accepts angle for trig operations.
-
- - parameter degrees: `Double` angle.
- - returns `Double` sine result.
- */
+/// Sine function that accepts angle for trig operations.
+///
+/// - parameter degrees: `Double` angle.
+/// - returns `Double` sine result.
 internal func sin(degrees: Double) -> Double {
     return __sinpi(degrees/180.0)
 }
 
 
-/**
- Sine function that accepts degrees for trig operations.
-
- - parameter degrees: `Float` angle.
- - returns `Float` sine result.
- */
+/// Sine function that accepts degrees for trig operations.
+///
+/// - parameter degrees: `Float` angle.
+/// - returns `Float` sine result.
 internal func sin(degrees: Float) -> Float {
     return __sinpif(degrees/180.0)
 }
 
 
 
-extension CGPoint {
+nonisolated extension CGPoint {
 
     /// Returns an point inverted in the Y-coordinate.
     public var invertedY: CGPoint {
         return CGPoint(x: self.x, y: self.y * -1)
     }
 
-    /**
-     Returns a display string rounded.
-
-     - parameter decimals: `Int` decimals to round to.
-     - returns: `String` display string.
-     */
+    /// Returns a display string rounded.
+    ///
+    /// - parameter decimals: `Int` decimals to round to.
+    /// - returns: `String` display string.
     public func roundTo(_ decimals: Int = 1) -> String {
         return "x: \(self.x.roundTo(decimals)), y: \(self.y.roundTo(decimals))"
     }
@@ -503,12 +442,10 @@ extension CGPoint {
         return int2(Int32(x), Int32(y))
     }
 
-    /**
-     Returns the distance to the given point.
-
-     - parameter point: `CGPoint` decimals to round to.
-     - returns: `Float` distance to other point.
-     */
+    /// Returns the distance to the given point.
+    ///
+    /// - parameter point: `CGPoint` decimals to round to.
+    /// - returns: `Float` distance to other point.
     public func distance(_ point: CGPoint) -> Float {
         let dx = Float(x - point.x)
         let dy = Float(y - point.y)
@@ -527,7 +464,7 @@ extension CGPoint {
 }
 
 
-extension CGPoint: Hashable {
+nonisolated extension CGPoint: @retroactive Hashable {
 
     public func hash(into hasher: inout Hasher) {
         hasher.combine(x)
@@ -537,13 +474,11 @@ extension CGPoint: Hashable {
 
 
 /// :nodoc:
-extension CGSize {
+nonisolated extension CGSize {
 
-    /**
-     Initialize with a single integer value representing both weidth & height.
-     
-     - parameter value: `IntegerLiteralType` width & height value.
-     */
+    /// Initialize with a single integer value representing both weidth & height.
+    ///
+    /// - parameter value: `IntegerLiteralType` width & height value.
     public init(value: IntegerLiteralType) {
         self.init(width: value, height: value)
     }
@@ -581,7 +516,7 @@ extension CGSize {
 
 
 
-extension CGRect {
+nonisolated extension CGRect {
 
     /// Initialize with a center point and size.
     public init(center: CGPoint, size: CGSize) {
@@ -621,22 +556,18 @@ extension CGRect {
         return [bottomLeft, topLeft, topRight, bottomRight]
     }
 
-    /**
-     Returns a rect by the bounds by a given amount.
-
-     - parameter amount: `CGFloat` decimals to round to.
-     - returns: `CGRect` rectangle with inset value.
-     */
+    /// Returns a rect by the bounds by a given amount.
+    ///
+    /// - parameter amount: `CGFloat` decimals to round to.
+    /// - returns: `CGRect` rectangle with inset value.
     public func insetBy(_ amount: CGFloat) -> CGRect {
         return self.insetBy(dx: amount, dy: amount)
     }
 
-    /**
-     Returns a display string rounded.
-
-     - parameter decimals: `Int` decimals to round to.
-     - returns: `String` display string.
-     */
+    /// Returns a display string rounded.
+    ///
+    /// - parameter decimals: `Int` decimals to round to.
+    /// - returns: `String` display string.
     public func roundTo(_ decimals: Int = 1) -> String {
         return "origin: \(Int(origin.x)), \(Int(origin.y)), size: \(Int(size.width)) x \(Int(size.height))"
     }
@@ -647,10 +578,8 @@ extension CGRect {
 }
 
 
-extension CGVector {
-    /**
-     * Returns the squared length of the vector described by the CGVector.
-     */
+nonisolated extension CGVector {
+    /// Returns the squared length of the vector described by the CGVector.
     public func lengthSquared() -> CGFloat {
         return dx*dx + dy*dy
     }
@@ -663,16 +592,12 @@ extension CGVector {
 
 
 extension SKScene {
-    /**
-     Returns the center point of a scene.
-     */
+    /// Returns the center point of a scene.
     public var center: CGPoint {
         return CGPoint(x: (size.width / 2) - (size.width * anchorPoint.x), y: (size.height / 2) - (size.height * anchorPoint.y))
     }
 
-    /**
-     Calculate the distance from the scene's origin
-     */
+    /// Calculate the distance from the scene's origin
     public func distanceFromOrigin(_ pos: CGPoint) -> CGVector {
         let dx = (pos.x - center.x)
         let dy = (pos.y - center.y)
@@ -683,39 +608,40 @@ extension SKScene {
 
 extension SKNode {
 
-    /**
-     Run an action with key & optional completion function.
-
-     - parameter action:     `SKAction!` SpriteKit action.
-     - parameter withKey:    `String!` action key.
-     - parameter completion: `() -> Void?` optional completion function.
-     */
-    public func run(_ action: SKAction!, withKey: String!, completion block: (() -> Void)?) {
+    /// Run an action with key & optional completion function.
+    ///
+    /// - parameter action:     `SKAction` SpriteKit action.
+    /// - parameter withKey:    `String?` action key; `nil` runs the action without a key.
+    /// - parameter block: `() -> Void?` optional completion function.
+    public func run(_ action: SKAction, withKey: String?, completion block: (() -> Void)?) {
+        guard let key = withKey else {
+            if let block = block {
+                run(action, completion: block)
+            } else {
+                run(action)
+            }
+            return
+        }
         if let block = block {
-            let completionAction = SKAction.run( block )
-            let compositeAction = SKAction.sequence([ action, completionAction ])
-            run(compositeAction, withKey: withKey)
+            run(SKAction.sequence([ action, SKAction.run(block) ]), withKey: key)
         } else {
-            run(action, withKey: withKey)
+            run(action, withKey: key)
         }
     }
 
-    /**
-     Animate the speed value over the given duration.
-
-     - parameter to:       `CGFloat` new speed value.
-     - parameter duration: `TimeInterval` animation length.
-     */
+    /// Animate the speed value over the given duration.
+    ///
+    /// - parameter newSpeed:       `CGFloat` new speed value.
+    /// - parameter duration: `TimeInterval` animation length.
+    /// - parameter completion: `(() -> Void)?` called when the speed change finishes.
     public func speed(to newSpeed: CGFloat, duration: TimeInterval, completion: (() -> Void)? = nil) {
         run(SKAction.speed(to: newSpeed, duration: duration), withKey: nil, completion: completion)
     }
 
-    /**
-     Adds a node to the end of the receiver’s list of child nodes.
-
-     - parameter node:   `SKNode` new child node.
-     - parameter fadeIn: `TimeInterval` fade in duration.
-     */
+    /// Adds a node to the end of the receiver’s list of child nodes.
+    ///
+    /// - parameter node:   `SKNode` new child node.
+    /// - parameter duration: `TimeInterval` fade in duration.
     public func addChild(_ node: SKNode, fadeIn duration: TimeInterval) {
         node.alpha = (duration > 0) ? 0 : node.alpha
         self.addChild(node)
@@ -729,11 +655,9 @@ extension SKNode {
 
 extension SKSpriteNode {
 
-    /**
-     Convenience initalizer to set texture filtering to nearest neighbor.
-
-     - parameter pixelImage: `String` texture image named.
-     */
+    /// Convenience initalizer to set texture filtering to nearest neighbor.
+    ///
+    /// - parameter named: `String` texture image named.
     convenience public init(pixelImage named: String) {
         self.init(imageNamed: named)
         self.texture?.filteringMode = .nearest
@@ -741,7 +665,7 @@ extension SKSpriteNode {
 }
 
 
-extension SKColor {
+nonisolated extension SKColor {
 
     /// Returns the hue, saturation, brightess & alpha components of the color
     internal var hsba: (h: CGFloat, s: CGFloat, b: CGFloat, a: CGFloat) {
@@ -756,82 +680,72 @@ extension SKColor {
         return (comps.r, comps.g, comps.b, comps.a)
     }
 
-    /**
-     Lightens the color by the given percentage.
-
-     - parameter percent: `CGFloat`
-     - returns: `SKColor` lightened color.
-     */
+    /// Lightens the color by the given percentage.
+    ///
+    /// - parameter percent: `CGFloat`
+    /// - returns: `SKColor` lightened color.
     internal func lighten(by percent: CGFloat) -> SKColor {
         return colorWithBrightness(factor: 1.0 + percent)
     }
 
-    /**
-     Darkens the color by the given percentage.
-
-     - parameter percent: `CGFloat`
-     - returns: `SKColor` darkened color.
-     */
+    /// Darkens the color by the given percentage.
+    ///
+    /// - parameter percent: `CGFloat`
+    /// - returns: `SKColor` darkened color.
     internal func darken(by percent: CGFloat) -> SKColor {
         return colorWithBrightness(factor: 1.0 - percent)
     }
 
-    /**
-     Return a modified color using the brightness factor provided
-
-     - parameter factor: brightness factor
-     - returns: `SKColor` modified color
-     */
+    /// Return a modified color using the brightness factor provided
+    ///
+    /// - parameter factor: brightness factor
+    /// - returns: `SKColor` modified color
     internal func colorWithBrightness(factor: CGFloat) -> SKColor {
         let components = self.hsba
         return SKColor(hue: components.h, saturation: components.s, brightness: components.b * factor, alpha: components.a)
     }
 
-    /**
-     Initialize an [`SKColor`][skcolor-url] with a hexadecimal string.
-
-     - parameter hexString:  `String` hexidecimal code.
-     - returns: `SKColor`
-     [skcolor-url]:https://developer.apple.com/reference/spritekit/skcolor
-     */
+    /// Initialize an `SKColor` with a hexadecimal string.
+    ///
+    /// Accepts the formats **Tiled** writes, with or without a leading `#`: `RRGGBB` and
+    /// `AARRGGBB` (alpha first, ie: `#ff3271d3` is opaque `#3271d3`), plus the shortened
+    /// `RGB` and `ARGB` forms. A string that is not valid hexadecimal produces a clear color.
+    ///
+    /// - parameter hexString:  `String` hexidecimal code.
+    /// - returns: `SKColor`
     public convenience init(hexString: String) {
         let hex = expandShortenedHexString(hexString)
-        var hexNumber = UInt64()
-        Scanner(string: hex).scanHexInt64(&hexNumber)
         let a, r, g, b: UInt64
-        switch hex.count {
-            case 3: // RGB (12-bit)
-                (a, r, g, b) = (255, (hexNumber >> 8) * 17, (hexNumber >> 4 & 0xF) * 17, (hexNumber & 0xF) * 17)
-            case 6: // RGB (24-bit)
-                (a, r, g, b) = (255, hexNumber >> 16, hexNumber >> 8 & 0xFF, hexNumber & 0xFF)
-            case 8: // ARGB (32-bit)
-                (a, r, g, b) = (hexNumber & 0x000000ff, hexNumber >> 24 & 0xFF, hexNumber >> 16 & 0xFF, hexNumber >> 8 & 0xFF)
-            default:
-                (a, r, g, b) = (0, 0, 0, 0)
+        if hex.allSatisfy(\.isHexDigit), let hexNumber = UInt64(hex, radix: 16) {
+            switch hex.count {
+                case 6: // RRGGBB (24-bit)
+                    (a, r, g, b) = (255, hexNumber >> 16, hexNumber >> 8 & 0xFF, hexNumber & 0xFF)
+                case 8: // AARRGGBB (32-bit), as written by Tiled
+                    (a, r, g, b) = (hexNumber >> 24 & 0xFF, hexNumber >> 16 & 0xFF, hexNumber >> 8 & 0xFF, hexNumber & 0xFF)
+                default:
+                    (a, r, g, b) = (0, 0, 0, 0)
+            }
+        } else {
+            (a, r, g, b) = (0, 0, 0, 0)
         }
         self.init(red: CGFloat(r) / 255, green: CGFloat(g) / 255, blue: CGFloat(b) / 255, alpha: CGFloat(a) / 255)
     }
 
-    /**
-
-     Initialize an SKColor with integer values (0-255).
-
-     - Parameters:
-       - red:   `Int` red value (0-255).
-       - green: `Int` green value (0-255).
-       - blue:  `Int` blue value (0-255).
-       - alpha: `Int` alpha value (0-255).
-     - returns: `SKColor`
-     */
+    /// Initialize an SKColor with integer values (0-255).
+    ///
+    /// - Parameters:
+    ///   - red:   `Int` red value (0-255).
+    ///   - green: `Int` green value (0-255).
+    ///   - blue:  `Int` blue value (0-255).
+    ///   - alpha: `Int` alpha value (0-255).
+    /// - returns: `SKColor`
     public convenience init(red: Int, green: Int, blue: Int, alpha: Int = 255) {
         self.init(red: CGFloat(red) / 255, green: CGFloat(green) / 255, blue: CGFloat(blue) / 255, alpha: CGFloat(alpha) / 255)
     }
 
-    /**
-     Returns the individual color RGBA components as float values.
-
-     - returns: RGBA color components.
-    */
+    /// Returns the individual color RGBA components as float values.
+    ///
+    /// - returns: RGBA color components.
     internal var components: (r: CGFloat, g: CGFloat, b: CGFloat, a: CGFloat) {
         guard let comps = cgColor.components else {
             return (0,0,0,0)
@@ -842,30 +756,31 @@ extension SKColor {
         return (comps[0], comps[1], comps[2], comps[3])
     }
 
-    /**
-     Returns the individual color RGBA components as integer values.
-
-     - returns: RGBA color components.
-    */
-    internal var integerCompoments: (r: Int, g: Int, b: Int, a: Int) {
+    /// Returns the individual color RGBA components as integer values (0-255, rounded).
+    ///
+    /// - returns: RGBA color components.
+    internal var integerComponents: (r: Int, g: Int, b: Int, a: Int) {
         let comps = components
-        let r = Int(comps.r * 255)
-        let g = Int(comps.g * 255)
-        let b = Int(comps.b * 255)
-        let a = Int(comps.a * 255)
+        let r = Int((comps.r * 255).rounded())
+        let g = Int((comps.g * 255).rounded())
+        let b = Int((comps.b * 255).rounded())
+        let a = Int((comps.a * 255).rounded())
         return (r,g,b,a)
     }
 
-    /**
-      Returns a hexadecimal string representation of the color.
+    /// Misspelled alias of `integerComponents`, kept for existing callers.
+    internal var integerCompoments: (r: Int, g: Int, b: Int, a: Int) {
+        return integerComponents
+    }
 
-     - returns: `String` hexadecimal string.
-     */
+    ///  Returns a hexadecimal string representation of the color, in **Tiled**'s format:
+    ///  `#rrggbb` for an opaque color, `#aarrggbb` (alpha first) otherwise.
+    ///
+    /// - returns: `String` hexadecimal string.
     public func hexString() -> String {
-        let comps = integerCompoments
-        var rgbHex = "#\(String(format: "%02x%02x%02x", comps.r, comps.g, comps.b))"
-        rgbHex += (comps.a == 255) ? "" : String(format: "%02x", comps.a)
-        return rgbHex
+        let comps = integerComponents
+        let rgbHex = String(format: "%02x%02x%02x", comps.r, comps.g, comps.b)
+        return (comps.a == 255) ? "#\(rgbHex)" : "#\(String(format: "%02x", comps.a))\(rgbHex)"
     }
 
     /*
@@ -894,11 +809,9 @@ extension SKColor {
         return SKColor(red: r, green: g, blue: b, alpha: a)
     }
 
-    /**
-     Return the color as a floating-point vector.
-
-     - returns: vector representation of the color.
-     */
+    /// Return the color as a floating-point vector.
+    ///
+    /// - returns: vector representation of the color.
     internal func vec4() -> GLKVector4 {
         var r: CGFloat = 0.0
         var g: CGFloat = 0.0
@@ -917,7 +830,7 @@ extension SKColor {
 
 
 /// :nodoc:
-extension SKColor {
+nonisolated extension SKColor {
 
     /// Returns a string description of the color hex string value.
     ///
@@ -934,12 +847,8 @@ extension SKColor {
     ///
     /// - Returns: RGBA component string description.
     public var rgbaDescription: String {
-        let comps = components
-        let r = Int(comps.r * 255)
-        let g = Int(comps.g * 255)
-        let b = Int(comps.b * 255)
-        let a = Int(comps.a * 255)
-        return "SKColor(r: \(r), g: \(g), b: \(b), a: \(a))"
+        let comps = integerComponents
+        return "SKColor(r: \(comps.r), g: \(comps.g), b: \(comps.b), a: \(comps.a))"
     }
 
     /// Returns a string description of the color RGBA float components.
@@ -961,26 +870,22 @@ extension SKColor {
 
 // MARK: - String
 
-extension String {
+nonisolated extension String {
 
-    /**
-     Simple function to split a string with the given pattern.
-
-     - parameter pattern: `String` pattern to split string with.
-     - returns: `[String]` groups of split strings.
-     */
+    /// Simple function to split a string with the given pattern.
+    ///
+    /// - parameter pattern: `String` pattern to split string with.
+    /// - returns: `[String]` groups of split strings.
     func split(_ pattern: String) -> [String] {
         return self.components(separatedBy: pattern)
     }
 
-    /**
-     Pads string on the with a pattern to fill width.
-
-     - parameter length:  `Int` length to fill.
-     - parameter value:   `String` pattern.
-     - parameter padLeft: `Bool` toggle this to pad the right.
-     - returns: `String` padded string.
-     */
+    /// Pads string on the with a pattern to fill width.
+    ///
+    /// - parameter length:  `Int` length to fill.
+    /// - parameter value:   `String` pattern.
+    /// - parameter padLeft: `Bool` toggle this to pad the right.
+    /// - returns: `String` padded string.
     func zfill(length: Int, pattern: String="0", padLeft: Bool = true) -> String {
         var filler = ""
         let padamt: Int = length - self.count > 0 ? length - self.count : 0
@@ -991,12 +896,10 @@ extension String {
         return (padLeft == true) ? filler + self : self + filler
     }
 
-    /**
-     Pad a string with spaces.
-
-     - parameter toSize: `Int` size of resulting string.
-     - returns: `String` padded string.
-     */
+    /// Pad a string with spaces.
+    ///
+    /// - parameter toSize: `Int` size of resulting string.
+    /// - returns: `String` padded string.
     func pad(_ toSize: Int) -> String {
         // current string length
         let currentLength = self.count
@@ -1009,34 +912,18 @@ extension String {
         return padded
     }
 
-    /**
-     Substitute a pattern in the string
-
-     - parameter pattern:     `String` pattern to replace.
-     - parameter replaceWith: replacement `String`.
-     - returns: `String` result.
-     */
+    /// Substitute a pattern in the string
+    ///
+    /// - parameter pattern:     `String` pattern to replace.
+    /// - parameter replaceWith: replacement `String`.
+    /// - returns: `String` result.
     func substitute(_ pattern: String, replaceWith: String) -> String {
         return self.replacingOccurrences(of: pattern, with: replaceWith)
     }
 
-    /**
-     Initialize with array of bytes.
-
-     - parameter bytes: `[UInt8]` byte array.
-     */
-    public init(_ bytes: [UInt8]) {
-        self.init()
-        for byte in bytes {
-            self.append(String(UnicodeScalar(byte)))
-        }
-    }
-
-    /**
-     Clean up whitespace & carriage returns.
-
-     - returns: `String` scrubbed string.
-     */
+    /// Clean up whitespace & carriage returns.
+    ///
+    /// - returns: `String` scrubbed string.
     func scrub() -> String {
         var scrubbed = self.replacingOccurrences(of: "\n", with: "")
         scrubbed = scrubbed.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines)
@@ -1082,7 +969,7 @@ extension String {
     /// Returns true if the string represents a path that exists and is a directory.
     var isDirectory: Bool {
         var isDir : ObjCBool = false
-        return FileManager.default.fileExists(atPath: self, isDirectory: &isDir)
+        return FileManager.default.fileExists(atPath: self.url.path, isDirectory: &isDir) && isDir.boolValue
     }
 
     /// Returns the filename if string is a url.
@@ -1104,7 +991,7 @@ extension String {
 
 // MARK: - URL
 
-extension URL {
+nonisolated extension URL {
 
     /// Returns the path file name without file extension.
     var basename: String {
@@ -1131,7 +1018,7 @@ extension URL {
     /// Returns true if the URL represents a path that exists and is a directory.
     var isDirectory: Bool {
         var isDir : ObjCBool = false
-        return FileManager.default.fileExists(atPath: self.path, isDirectory: &isDir)
+        return FileManager.default.fileExists(atPath: self.path, isDirectory: &isDir) && isDir.boolValue
     }
 
     /// Returns true if the URL represents a path in the app bundle.
@@ -1143,14 +1030,14 @@ extension URL {
 }
 
 
-extension String {
+nonisolated extension String {
 
     /// Returns true if the string represents a valid hexadecimal color.
     public var isValidHexColor: Bool {
         let pattern = "^#?([0-9A-F]{3}){1,2}$|^#?([0-9A-F]{4}){1,2}$"
         do {
             let regex = try NSRegularExpression(pattern: pattern, options: NSRegularExpression.Options.caseInsensitive)
-            let numberOfMatches = regex.numberOfMatches(in: self, options: [], range: NSMakeRange(0, self.count))
+            let numberOfMatches = regex.numberOfMatches(in: self, options: [], range: NSRange(location: 0, length: self.utf16.count))
 
             if (numberOfMatches != 1) {
                 return false
@@ -1163,11 +1050,9 @@ extension String {
         }
     }
 
-    /**
-     Returns a SpriteKit color for this string. Returns `SKColor.clear` if the string cannot be parsed.
-
-     - returns: hex color, or clear if the string is invalid.
-    */
+    /// Returns a SpriteKit color for this string. Returns `SKColor.clear` if the string cannot be parsed.
+    ///
+    /// - returns: hex color, or clear if the string is invalid.
     public func toHexColor() -> SKColor {
         return (self.isValidHexColor == true) ? SKColor(hexString: self) : SKColor.clear
     }
@@ -1177,7 +1062,7 @@ extension String {
 
 // MARK: - TimeInterval
 
-extension TimeInterval {
+nonisolated extension TimeInterval {
 
     /// Returns the current value in milleseconds.
     var milleseconds: Double {
@@ -1190,14 +1075,12 @@ extension TimeInterval {
 // MARK: - FloatingPoint
 
 
-extension FloatingPoint {
+nonisolated extension FloatingPoint {
     
-    /**
-     Returns a value that is precise to a given number of digits.
-    
-     - parameter value: floating point precision.
-     - returns: the current value with the given precision.
-    */
+    /// Returns a value that is precise to a given number of digits.
+    ///
+    /// - parameter value: floating point precision.
+    /// - returns: the current value with the given precision.
     public func precised(_ value: Int = 1) -> Self {
         let offset = Self(Int(pow(10.0, Double(value))))
         return (self * offset).rounded() / offset
@@ -1206,95 +1089,58 @@ extension FloatingPoint {
 
 
 
-// MARK: - Events & Vallbacks
+// MARK: - Events & Callbacks
 
+/// Notifications for app-level observers. Every notification's `object` is the posting map, camera or statistics
+/// value, so observers can filter by map.
 extension Notification.Name {
 
-    public struct Tileset {
-        public static let DataAdded             = Notification.Name(rawValue: "com.sktiled.notification.name.tileset.dataAdded")
-        public static let DataRemoved           = Notification.Name(rawValue: "com.sktiled.notification.name.tileset.dataRemoved")
-        public static let SpriteSheetUpdated    = Notification.Name(rawValue: "com.sktiled.notification.name.tileset.spritesheetUpdated")
-    }
-
-    public struct TileData {
-        public static let FrameAdded            = Notification.Name(rawValue: "com.sktiled.notification.name.tileData.frameAdded")
-        public static let TextureChanged        = Notification.Name(rawValue: "com.sktiled.notification.name.tileData.textureChanged")
-        public static let ActionAdded           = Notification.Name(rawValue: "com.sktiled.notification.name.tileData.actionAdded")
-    }
-
-    public struct Layer {
-        public static let TileAdded             = Notification.Name(rawValue: "com.sktiled.notification.name.layer.tileAdded")
-        public static let AnimatedTileAdded     = Notification.Name(rawValue: "com.sktiled.notification.name.layer.animatedTileAdded")
-        public static let ObjectAdded           = Notification.Name(rawValue: "com.sktiled.notification.name.layer.objectAdded")
-        public static let ObjectRemoved         = Notification.Name(rawValue: "com.sktiled.notification.name.layer.objectRemoved")
-    }
-
-    public struct Tile {
-        public static let DataChanged           = Notification.Name(rawValue: "com.sktiled.notification.name.tile.dataChanged")
-        public static let RenderModeChanged     = Notification.Name(rawValue: "com.sktiled.notification.name.tile.renderModeChanged")
-    }
-
-    public struct Map {
+    nonisolated public struct Map {
+        /// Posted by an `SKTilemap` when it has finished rendering. `userInfo["renderTime"]` is the start `Date`.
         public static let FinishedRendering     = Notification.Name(rawValue: "com.sktiled.notification.name.map.finishedRendering")
-        public static let Updated               = Notification.Name(rawValue: "com.sktiled.notification.name.map.updated")
+        /// Posted with an `SKTilemap.RenderStatistics` value when `TiledGlobals.enableRenderCallbacks` is on.
         public static let RenderStatsUpdated    = Notification.Name(rawValue: "com.sktiled.notification.name.map.renderStatsUpdated")
-        public static let CacheUpdated          = Notification.Name(rawValue: "com.sktiled.notification.name.map.cacheUpdated")
-        public static let UpdateModeChanged     = Notification.Name(rawValue: "com.sktiled.notification.name.map.updateModeChanged")
-
     }
 
-    public struct DataStorage {
-        public static let ProxyVisibilityChanged  = Notification.Name(rawValue: "com.sktiled.notification.name.dataStorage.proxyVisibilityChanged")
+    nonisolated public struct DataStorage {
+        /// Posted when a map's tile isolation mode changes.
         public static let IsolationModeChanged    = Notification.Name(rawValue: "com.sktiled.notification.name.dataStorage.isolationModeChanged")
     }
 
-    public struct Globals {
-        public static let Updated                 = Notification.Name(rawValue: "com.sktiled.notification.name.globals.updated")
-    }
-
-    public struct Camera {
+    nonisolated public struct Camera {
+        /// Posted by an `SKTiledSceneCamera` when it moves, zooms or changes control mode.
         public static let Updated                 = Notification.Name(rawValue: "com.sktiled.notification.name.camera.updated")
-    }
-
-    public struct RenderStats {
-        public static let StaticTilesUpdated    = Notification.Name(rawValue: "com.sktiled.notification.name.renderStats.staticTilesUpdated")
-        public static let AnimatedTilesUpdated  = Notification.Name(rawValue: "com.sktiled.notification.name.renderStats.animatedTilesUpdated")
-        public static let VisibilityChanged     = Notification.Name(rawValue: "com.sktiled.notification.name.renderStats.visibilityChanged")
     }
 }
 
 
-extension OptionSet where RawValue: FixedWidthInteger {
+nonisolated extension OptionSet where RawValue: FixedWidthInteger {
 
-    public func elements() -> AnySequence<Self> {
-        var remainingBits = rawValue
-        var bitMask: RawValue = 1
-        return AnySequence {
-            return AnyIterator {
-                while remainingBits != 0 {
-                    defer { bitMask = bitMask &* 2 }
-                    if remainingBits & bitMask != 0 {
-                        remainingBits = remainingBits & ~bitMask
-                        return Self(rawValue: bitMask)
-                    }
-                }
-                return nil
-            }
+    /// Returns each single-bit option contained in the set, lowest bit first.
+    public func elements() -> [Self] {
+        return (0..<RawValue.bitWidth).compactMap { bit in
+            let mask: RawValue = 1 << bit
+            return (rawValue & mask) != 0 ? Self(rawValue: mask) : nil
         }
     }
 }
 
 
 
+/// Per-shape starting colors for `SKAction.colorFadeAction(after:)`.
+private final class ColorFadeStartColors {
+    typealias RGBA = (red: CGFloat, green: CGFloat, blue: CGFloat, alpha: CGFloat)
+    var colors: [ObjectIdentifier: (stroke: RGBA, fill: RGBA)] = [:]
+}
+
+
 extension SKAction {
 
-    /**
-     Custom action to animate sprite textures with varying frame durations.
-
-     - parameter frames:        `[(texture: SKTexture, duration: TimeInterval)]` array of tuples containing texture & duration.
-     - parameter repeatForever: `Bool` run the animation forever.
-     - returns: `SKAction` custom animation action.
-     */
+    /// Custom action to animate sprite textures with varying frame durations.
+    ///
+    /// - parameter frames:        `[(texture: SKTexture, duration: TimeInterval)]` array of tuples containing texture & duration.
+    /// - parameter repeatForever: `Bool` run the animation forever.
+    /// - returns: `SKAction` custom animation action.
     public class func tileAnimation(_ frames: [(texture: SKTexture, duration: TimeInterval)], repeatForever: Bool = true) -> SKAction {
         var actions: [SKAction] = []
         for frame in frames {
@@ -1312,26 +1158,31 @@ extension SKAction {
         return SKAction.sequence(actions)
     }
 
-    /**
-     Custom action to animate shape colors over a duration.
-
-     - parameter duration: `TimeInterval` time for the effect.
-     - returns: `SKAction` custom shape fade action.
-     */
+    /// Custom action to animate shape colors over a duration.
+    ///
+    /// - returns: `SKAction` custom shape fade action.
     public class func colorFadeAction(after delay: TimeInterval) -> SKAction {
         // Create a custom action for color fade
         let duration: TimeInterval = 1.0
+        // The starting colors of each shape, captured on the first frame so the fade
+        // interpolates from them rather than from the already-faded current colors.
+        let startColors = ColorFadeStartColors()
         let action = SKAction.customAction(withDuration: duration) {(node, elapsed) in
             if let shape = node as? SKShapeNode {
 
-                let currentStroke = shape.strokeColor
-                let currentFill = shape.fillColor
+                let shapeID = ObjectIdentifier(shape)
+                let start = startColors.colors[shapeID] ?? (stroke: shape.strokeColor.rgb, fill: shape.fillColor.rgb)
 
                 // Calculate the changing color during the elapsed time.
-                let fraction = elapsed / CGFloat(duration)
+                let fraction = min(elapsed / CGFloat(duration), 1)
+                if (fraction >= 1) {
+                    startColors.colors[shapeID] = nil
+                } else {
+                    startColors.colors[shapeID] = start
+                }
 
-                let currentStrokeRGB = currentStroke.rgb
-                let currentFillRGB = currentFill.rgb
+                let currentStrokeRGB = start.stroke
+                let currentFillRGB = start.fill
                 let endColorRGB: (red: CGFloat, green: CGFloat, blue: CGFloat, alpha: CGFloat) = (0,0,0,0)
 
                 let sred = CGFloat().lerp(start: currentStrokeRGB.red, end: endColorRGB.red, t: fraction)
@@ -1357,32 +1208,24 @@ extension SKAction {
     }
 
 
-    /**
-     Custom action to fade a node's alpha after a pause.
-
-     - returns: `SKAction` custom fade action.
-     */
+    /// Custom action to fade a node's alpha after a pause.
+    ///
+    /// - returns: `SKAction` custom fade action.
     class func fadeAfter(wait duration: TimeInterval, alpha: CGFloat) -> SKAction {
         return SKAction.sequence([SKAction.wait(forDuration: duration), SKAction.fadeAlpha(to: alpha, duration: 0.5)])
     }
 
-    /**
-     * Performs an action after the specified delay.
-     */
+    /// Performs an action after the specified delay.
     class func afterDelay(_ delay: TimeInterval, performAction action: SKAction) -> SKAction {
         return SKAction.sequence([SKAction.wait(forDuration: delay), action])
     }
 
-    /**
-     * Performs a block after the specified delay.
-     */
+    /// Performs a block after the specified delay.
     class func afterDelay(_ delay: TimeInterval, runBlock block: @escaping () -> Void) -> SKAction {
         return SKAction.afterDelay(delay, performAction: SKAction.run(block))
     }
 
-    /**
-     * Removes the node from its parent after the specified delay.
-     */
+    /// Removes the node from its parent after the specified delay.
     class func removeFromParentAfterDelay(_ delay: TimeInterval) -> SKAction {
         return SKAction.afterDelay(delay, performAction: SKAction.removeFromParent())
     }
@@ -1603,14 +1446,12 @@ public func / (lhs: CGRect, rhs: CGFloat) -> CGRect {
 
 // MARK: SKColor
 
-/**
- Returns a new color based on interpolated values of two source colors.
-
- - parameter start: start color.
- - parameter end: end color.
- - parameter t: blend amount.
- - returns: interpolated color.
-*/
+/// Returns a new color based on interpolated values of two source colors.
+///
+/// - parameter start: start color.
+/// - parameter end: end color.
+/// - parameter t: blend amount.
+/// - returns: interpolated color.
 public func lerp(start: SKColor, end: SKColor, t: CGFloat) -> SKColor {
     let newRed   = (1.0 - t) * start.components.r   + t * end.components.r
     let newGreen = (1.0 - t) * start.components.g + t * end.components.g
@@ -1658,26 +1499,22 @@ public func / (lhs: int2, rhs: int2) -> int2 {
 }
 
 
-extension vector_int2 {
+nonisolated extension vector_int2 {
 
-    /**
-     Returns the difference vector to another in2.
-
-     - parameter v: `vector_int2` coordinate.
-     - returns: `CGVector` difference between.
-     */
+    /// Returns the difference vector to another in2.
+    ///
+    /// - parameter v: `vector_int2` coordinate.
+    /// - returns: `CGVector` difference between.
     public func delta(to v: int2) -> CGVector {
         let dx = Float(x - v.x)
         let dy = Float(y - v.y)
         return CGVector(dx: Int(dx), dy: Int(dy))
     }
 
-    /**
-     Returns true if the coordinate vector is contiguous to another vector.
-
-     - parameter v: `vector_int2` coordinate.
-     - returns: `Bool` coordinates are contiguous.
-     */
+    /// Returns true if the coordinate vector is contiguous to another vector.
+    ///
+    /// - parameter v: `vector_int2` coordinate.
+    /// - returns: `Bool` coordinates are contiguous.
     public func isContiguousTo(v: int2) -> Bool {
         let dx = Float(x - v.x)
         let dy = Float(y - v.y)
@@ -1703,15 +1540,13 @@ public func normalize(_ value: CGFloat, _ minimum: CGFloat, _ maximum: CGFloat) 
 }
 
 
-/**
- Expand shortened hex color strings.
-
-   ie: `333` -> `333333`, or `6573` -> `66557733`
-
- - parameter hexString: input hex string.
- - returns: valid hex string.
- */
-public func expandShortenedHexString(_ hexString: String) -> String {
+/// Expand shortened hex color strings.
+///
+///   ie: `333` -> `333333`, or `6573` -> `66557733`
+///
+/// - parameter hexString: input hex string.
+/// - returns: valid hex string.
+nonisolated public func expandShortenedHexString(_ hexString: String) -> String {
     let hex = hexString.trimmingCharacters(in: CharacterSet.alphanumerics.inverted)
     switch hex.count {
         case 3, 4:
@@ -1730,14 +1565,12 @@ public func expandShortenedHexString(_ hexString: String) -> String {
 // MARK: - Visualization Functions
 
 
-/**
- Visualize a layer grid as a texture.
-
- - parameter layer:      `SKTiledLayerObject` layer instance.
- - parameter imageScale: `CGFloat` image scale multiplier.
- - parameter lineScale:  `CGFloat` line scale multiplier.
- - returns:              `CGImage` visual grid texture.
- */
+/// Visualize a layer grid as a texture.
+///
+/// - parameter layer:      `SKTiledLayerObject` layer instance.
+/// - parameter imageScale: `CGFloat` image scale multiplier.
+/// - parameter lineScale:  `CGFloat` line scale multiplier.
+/// - returns:              `CGImage` visual grid texture.
 internal func drawLayerGrid(_ layer: SKTiledLayerObject,
                             imageScale: CGFloat = 8,
                             lineScale: CGFloat = 1) -> CGImage? {
@@ -1874,14 +1707,12 @@ internal func drawLayerGrid(_ layer: SKTiledLayerObject,
 }
 
 
-/**
- Generate a visual navigation graph texture.
-
- - parameter layer:      `SKTiledLayerObject` layer instance.
- - parameter imageScale: `CGFloat` image scale multiplier.
- - parameter lineScale:  `CGFloat` line scale multiplier.
- - returns: `CGImage` visual graph texture.
- */
+/// Generate a visual navigation graph texture.
+///
+/// - parameter layer:      `SKTiledLayerObject` layer instance.
+/// - parameter imageScale: `CGFloat` image scale multiplier.
+/// - parameter lineScale:  `CGFloat` line scale multiplier.
+/// - returns: `CGImage` visual graph texture.
 internal func drawLayerGraph(_ layer: SKTiledLayerObject,
                              imageScale: CGFloat = 8,
                              lineScale: CGFloat = 1) -> CGImage? {
@@ -2042,9 +1873,7 @@ internal func drawLayerGraph(_ layer: SKTiledLayerObject,
 
 // MARK: - File System
 #if os(macOS)
-/**
- Create a temporary directory.
- */
+/// Create a temporary directory.
 internal func createTempDirectory(named: String) -> URL? {
     let directory = NSTemporaryDirectory()
     guard let url = NSURL.fileURL(withPathComponents: [directory, named]) else {
@@ -2062,9 +1891,7 @@ internal func createTempDirectory(named: String) -> URL? {
 }
 
 
-/**
- Write the given image to PNG file.
- */
+/// Write the given image to PNG file.
 internal func writeToFile(_ image: CGImage, url: URL) -> Data {
     let bitmapRep: NSBitmapImageRep = NSBitmapImageRep(cgImage: image)
     let properties = Dictionary<NSBitmapImageRep.PropertyKey, AnyObject>()
@@ -2102,14 +1929,12 @@ internal func drawAnchor(_ node: SKNode,
 
 // MARK: - Polygon Drawing
 
-/**
- Returns an array of points for the given dimensions.
-
- - parameter width:   `CGFloat` rect width.
- - parameter height:  `CGFloat` rect height.
- - parameter origin: `CGPoint` rectangle origin.
- - returns: `[CGPoint]` array of points.
- */
+/// Returns an array of points for the given dimensions.
+///
+/// - parameter width:   `CGFloat` rect width.
+/// - parameter height:  `CGFloat` rect height.
+/// - parameter origin: `CGPoint` rectangle origin.
+/// - returns: `[CGPoint]` array of points.
 public func rectPointArray(_ width: CGFloat, height: CGFloat, origin: CGPoint = CGPoint.zero) -> [CGPoint] {
     let points: [CGPoint] = [
         origin,
@@ -2121,27 +1946,23 @@ public func rectPointArray(_ width: CGFloat, height: CGFloat, origin: CGPoint = 
 }
 
 
-/**
- Returns an array of points for the given dimensions.
-
- - parameter size:   `CGSize` rect size.
- - parameter origin: `CGPoint` rectangle origin.
- - returns: `[CGPoint]` array of points.
- */
+/// Returns an array of points for the given dimensions.
+///
+/// - parameter size:   `CGSize` rect size.
+/// - parameter origin: `CGPoint` rectangle origin.
+/// - returns: `[CGPoint]` array of points.
 public func rectPointArray(_ size: CGSize, origin: CGPoint = CGPoint.zero) -> [CGPoint] {
     return rectPointArray(size.width, height: size.height, origin: origin)
 }
 
 
-/**
- Returns an array of points describing a polygon shape.
-
- - parameter sides:  `Int` number of sides.
- - parameter radius: `CGSize` radius of circle.
- - parameter offset: `CGFloat` rotation offset (45 to return a rectangle).
- - parameter origin: `CGPoint` origin point.
-  - returns: `[CGPoint]` array of points.
- */
+/// Returns an array of points describing a polygon shape.
+///
+/// - parameter sides:  `Int` number of sides.
+/// - parameter radius: `CGSize` radius of circle.
+/// - parameter offset: `CGFloat` rotation offset (45 to return a rectangle).
+/// - parameter origin: `CGPoint` origin point.
+///  - returns: `[CGPoint]` array of points.
 public func polygonPointArray(_ sides: Int, radius: CGSize, offset: CGFloat = 0, origin: CGPoint = CGPoint.zero) -> [CGPoint] {
     let angle = (360 / CGFloat(sides)).radians()
     let cx = origin.x       // x origin
@@ -2160,36 +1981,29 @@ public func polygonPointArray(_ sides: Int, radius: CGSize, offset: CGFloat = 0,
 }
 
 
-/**
-
- Takes an array of points and returns a path.
-
- - parameter points:  `[CGPoint]` polygon points.
- - parameter closed:  `Bool` path should be closed.
-  - returns: `CGPath` path from the given points.
- */
+/// Takes an array of points and returns a path.
+///
+/// - parameter points:  `[CGPoint]` polygon points.
+/// - parameter closed:  `Bool` path should be closed.
+///  - returns: `CGPath` path from the given points.
 public func polygonPath(_ points: [CGPoint], closed: Bool = true) -> CGPath {
     let path = CGMutablePath()
-    var mpoints = points
-    let first = mpoints.remove(at: 0)
-    path.move(to: first)
-
-    for p in mpoints {
-        path.addLine(to: p)
+    guard (points.isEmpty == false) else {
+        return path
     }
+    path.addLines(between: points)
     if (closed == true) { path.closeSubpath() }
     return path
 }
 
 
-/**
- Draw a polygon shape based on an aribitrary number of sides.
-
- - parameter sides:    `Int` number of sides.
- - parameter radius:   `CGSize` w/h radius.
- - parameter offset:   `CGFloat` rotation offset (45 to return a rectangle).
- - returns: `CGPathf`  path from the given points.
- */
+/// Draw a polygon shape based on an aribitrary number of sides.
+///
+/// - parameter sides:    `Int` number of sides.
+/// - parameter radius:   `CGSize` w/h radius.
+/// - parameter offset:   `CGFloat` rotation offset (45 to return a rectangle).
+/// - parameter origin: `CGPoint` center of the polygon.
+/// - returns: `CGPathf`  path from the given points.
 public func polygonPath(_ sides: Int, radius: CGSize, offset: CGFloat = 0, origin: CGPoint = CGPoint.zero) -> CGPath {
     let path = CGMutablePath()
     let points = polygonPointArray(sides, radius: radius, offset: offset)
@@ -2203,14 +2017,12 @@ public func polygonPath(_ sides: Int, radius: CGSize, offset: CGFloat = 0, origi
 }
 
 
-/**
- Takes an array of points and returns a bezier path.
-
- - parameter points:  `[CGPoint]` polygon points.
- - parameter closed:  `Bool` path should be closed.
- - parameter alpha:   `CGFloat` curvature.
- - returns: `(CGPath, [CGPoint])` bezier path and control points.
- */
+/// Takes an array of points and returns a bezier path.
+///
+/// - parameter points:  `[CGPoint]` polygon points.
+/// - parameter closed:  `Bool` path should be closed.
+/// - parameter alpha:   `CGFloat` curvature.
+/// - returns: `(CGPath, [CGPoint])` bezier path and control points.
 public func bezierPath(_ points: [CGPoint], closed: Bool = true, alpha: CGFloat = 1) -> (path: CGPath, points: [CGPoint]) {
     guard points.count > 1 else { return (CGMutablePath(), [CGPoint]()) }
     assert(alpha >= 0 && alpha <= 1.0, "Alpha must be between 0 and 1")
@@ -2273,13 +2085,11 @@ public func bezierPath(_ points: [CGPoint], closed: Bool = true, alpha: CGFloat 
 }
 
 
-/**
- Takes an array of grid graph points and returns a path. Set threshold value to allow for gaps in the path.
-
- - parameter points:    `[CGPoint]` path points.
- - parameter threshold: `CGFloat` gap threshold size.
- - returns: `CGPath` path from the given points.
- */
+/// Takes an array of grid graph points and returns a path. Set threshold value to allow for gaps in the path.
+///
+/// - parameter points:    `[CGPoint]` path points.
+/// - parameter threshold: `CGFloat` gap threshold size.
+/// - returns: `CGPath` path from the given points.
 public func polygonPath(_ points: [CGPoint], threshold: CGFloat) -> CGPath {
     let path = CGMutablePath()
     var mpoints = points
@@ -2298,16 +2108,14 @@ public func polygonPath(_ points: [CGPoint], threshold: CGFloat) -> CGPath {
     return path
 }
 
-/**
- Given two points, create an arrowhead.
-
- - parameter startPoint:  `CGPoint` first point.
- - parameter endPoint:    `CGPoint` last point.
- - parameter tailWidth:   `CGFloat` arrow tail width.
- - parameter headWidth:   `CGFloat` arrow head width.
- - parameter headLength:  `CGFloat` arrow head length.
- - returns: `CGPath` path from the given points.
- */
+/// Given two points, create an arrowhead.
+///
+/// - parameter startPoint:  `CGPoint` first point.
+/// - parameter endPoint:    `CGPoint` last point.
+/// - parameter tailWidth:   `CGFloat` arrow tail width.
+/// - parameter headWidth:   `CGFloat` arrow head width.
+/// - parameter headLength:  `CGFloat` arrow head length.
+/// - returns: `CGPath` path from the given points.
 public func arrowFromPoints(startPoint: CGPoint,
                             endPoint: CGPoint,
                             tailWidth: CGFloat,
@@ -2352,26 +2160,23 @@ public func arrowFromPoints(startPoint: CGPoint,
 
 
 
-/**
- Clamp a point to the given scale.
-
- - parameter point:  `CGPoint` point to clamp.
- - parameter scale:  `CGFloat` device scale.
- - returns: `CGPoint` clamped point.
- */
+/// Clamp a point to the given scale.
+///
+/// - parameter point:  `CGPoint` point to clamp.
+/// - parameter scale:  `CGFloat` device scale.
+/// - returns: `CGPoint` clamped point.
 internal func clampedPosition(point: CGPoint, scale: CGFloat) -> CGPoint {
-    let clampedX = round(Int(point.x * scale) / scale)
-    let clampedY = round(Int(point.y * scale) / scale)
+    // snap to the nearest device pixel (not the nearest point).
+    let clampedX = (point.x * scale).rounded() / scale
+    let clampedY = (point.y * scale).rounded() / scale
     return CGPoint(x: clampedX, y: clampedY)
 }
 
 
-/**
- Clamp the position of a given node (and parent).
-
- - parameter node:  `SKNode` node to re-position.
- - parameter scale: `CGFloat` device scale.
- */
+/// Clamp the position of a given node (and parent).
+///
+/// - parameter node:  `SKNode` node to re-position.
+/// - parameter scale: `CGFloat` device scale.
 public func clampNodePosition(node: SKNode, scale: CGFloat) {
     node.position = clampedPosition(point: node.position, scale: scale)
     if let parentNode = node.parent {
@@ -2386,78 +2191,26 @@ public func clampNodePosition(node: SKNode, scale: CGFloat) {
 // MARK: - Deprecations
 
 /// :nodoc:
-extension SKColor {
+nonisolated extension SKColor {
 
-    /**
-     Returns a string description of the color RGBA integer components.
 
-      ie: `SKColor(r: 227, g: 180, b: 71, a: 71)`
-
-     - returns: RGBA component string description.
-    */
-    @available(*, deprecated, renamed: "rgbaDescription")
-    public var rgbDescription: String {
-        return rgbaDescription
-    }
-
-    /**
-     Returns a string description of the color RGBA integer components.
-
-      ie: `SKColor(r: 227, g: 180, b: 71, a: 71)`
-
-     - returns: RGBA component string description.
-    */
-    @available(*, deprecated, renamed: "rgbaDescription")
-    public var integerComponentDescription: String {
-        return rgbaDescription
-    }
 }
 
 
-extension CGSize {
+nonisolated extension CGSize {
     
-    /// Returns a display string rounded to a given number of decimal places.
-    ///
-    /// - Parameter decimals: decimals to round to.
-    /// - Returns: display string.
-    @available(*, deprecated, renamed: "stringRoundedTo(_:)")
-    public func roundTo(_ decimals: Int = 1) -> String {
-        return stringRoundedTo(decimals)
-    }
     
-    /// Returns the width x height.
-    @available(*, deprecated, renamed: "pointCount")
-    public var count: Int {
-        return Int(width) * Int(height)
-    }
 }
 
 
-/**
- Dumps SKTiled framework globals to the console.
- */
-@available(*, deprecated, renamed: "SKTiledGlobals()")
-public func getSKTiledGlobals() {
-    TiledGlobals.default.dumpStatistics()
-}
 
 
-/**
- Clamp the position of a given node (and parent).
-
- - parameter node:  `SKNode` node to re-position.
- - parameter scale: `CGFloat` device scale.
- */
-@available(*, deprecated, renamed: "clampNodePosition(node:scale:)")
-public func clampPositionWithNode(node: SKNode, scale: CGFloat) {
-    clampNodePosition(node: node, scale: scale)
-}
 
 
 // MARK: - Compression/Gzip
 
 /// Compression level whose rawValue is based on the zlib's constants.
-public struct CompressionLevel: RawRepresentable {
+nonisolated public struct CompressionLevel: RawRepresentable, Sendable {
 
     /// Compression level in the range of `0` (no compression) to `9` (maximum compression).
     public let rawValue: Int32
@@ -2480,10 +2233,10 @@ public struct CompressionLevel: RawRepresentable {
 
 
 /// Errors on gzipping/gunzipping based on the zlib error codes.
-public struct GzipError: Swift.Error {
+nonisolated public struct GzipError: Swift.Error {
     // cf. http://www.zlib.net/manual.html
 
-    public enum Kind: Equatable {
+    public enum Kind: Equatable, Sendable {
         /// The stream structure was inconsistent.
         ///
         /// - underlying zlib error: `Z_STREAM_ERROR` (-2)
@@ -2526,7 +2279,7 @@ public struct GzipError: Swift.Error {
     internal init(code: Int32, msg: UnsafePointer<CChar>?) {
 
         self.message = {
-            guard let msg = msg, let message = String(validatingUTF8: msg) else {
+            guard let msg = msg, let message = String(validatingCString: msg) else {
                 return "Unknown gzip error"
             }
             return message
@@ -2560,7 +2313,7 @@ public struct GzipError: Swift.Error {
 
 /// Extension for Data objectsfor roundtripping data from arrays.
 /// https://stackoverflow.com/questions/38023838/round-trip-swift-number-types-to-from-data
-extension Data {
+nonisolated extension Data {
 
     // Initialize with a value.
     init<T>(from value: T) {
@@ -2589,7 +2342,7 @@ extension Data {
 }
 
 
-extension Data {
+nonisolated extension Data {
 
     /// Whether the receiver is compressed in gzip format.
     public var isGzipped: Bool {
@@ -2730,7 +2483,7 @@ extension Data {
 }
 
 
-private struct DataSize {
+nonisolated private struct DataSize {
 
     static let chunk = 1 << 14
     static let stream = MemoryLayout<z_stream>.size

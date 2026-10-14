@@ -82,13 +82,11 @@ internal class Logger {
     /// Default logging level.
     internal var loggingLevel: LoggingLevel = LoggingLevel.info
 
-    /**
-     Print a formatted log message to output.
-
-     - parameter message: `String` logging message.
-     - parameter level:   `LoggingLevel` output verbosity.
-     - parameter symbol:  `String?` class sending the message.
-     */
+    /// Print a formatted log message to output.
+    ///
+    /// - parameter message: `String` logging message.
+    /// - parameter level:   `LoggingLevel` output verbosity.
+    /// - parameter symbol:  `String?` class sending the message.
     func log(_ message: String,
              level: LoggingLevel = LoggingLevel.info,
              symbol: String? = nil,
@@ -105,11 +103,8 @@ internal class Logger {
                                                  symbol: symbol, file: file,
                                                  method: method, line: line)
 
-            performInMain {
-                let outputStream = (self.loggingLevel.rawValue < 3) ? stderr : stdout
-                fputs("\(formattedMessage)\n", outputStream)
-            }
-            return
+            let outputStream = (level.rawValue <= LoggingLevel.error.rawValue) ? stderr : stdout
+            fputs("\(formattedMessage)\n", outputStream)
         }
     }
 
@@ -164,21 +159,6 @@ internal class Logger {
         return result.joined(separator: ": ")
     }
 }
-
-
-/**
- Perform the given function in the main thread.
-
- - parameter action: `() -> Void` closure function.
-*/
-internal func performInMain(_ action: @escaping () -> Void) {
-    if (Thread.isMainThread == true) {
-        action()
-    } else {
-        DispatchQueue.main.async(execute: action)
-    }
-}
-
 
 
 // Methods for all loggable objects.

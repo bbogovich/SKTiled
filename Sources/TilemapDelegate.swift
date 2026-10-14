@@ -29,46 +29,44 @@ import SpriteKit
 import GameplayKit
 
 
-/**
- ## Overview
- 
- Methods that allow interaction with an `SKTilemap` object as it is being created to customize its properties.
- 
- ### Properties
- 
- | Property           | Description                        |
- |:-------------------|:-----------------------------------|
- | zDeltaForLayers    | Default z-distance between layers. |
- 
- ### Instance Methods ###
- 
- Delegate callbacks are called asynchronously as the map is being read from disk and rendered:
- 
- | Method                | Description                                                      |
- |:----------------------|:-----------------------------------------------------------------|
- | didBeginParsing       | Called when the tilemap is instantiated.                         |
- | didAddTileset         | Called when a tileset is added to a map.                         |
- | didAddLayer           | Called when a layer is added to a tilemap.                       |
- | didReadMap            | Called when the tilemap is finished parsing.                     |
- | didRenderMap          | Called when the tilemap layers are finished rendering.           |
- | didAddNavigationGraph | Called when the a navigation graph is built for a layer.         |
- | objectForTileType     | Specify a custom tile object for use in tile layers.             |
- | objectForVectorType   | Specify a custom object for use in object groups.                |
- | objectForGraphType    | Specify a custom graph node object for use in navigation graphs. |
- 
- ### Custom Objects ###
- 
- Custom object methods can be used to substitute your own objects for tiles:
- 
- ```swift
- func objectForTileType(named: String? = nil) -> SKTile.Type {
-     if (named == "MyTile") {
-        return MyTile.self
-     }
-    return SKTile.self
- }
- ```
- */
+/// ## Overview
+///
+/// Methods that allow interaction with an `SKTilemap` object as it is being created to customize its properties.
+///
+/// ### Properties
+///
+/// | Property           | Description                        |
+/// |:-------------------|:-----------------------------------|
+/// | zDeltaForLayers    | Default z-distance between layers. |
+///
+/// ### Instance Methods ###
+///
+/// Delegate callbacks are called asynchronously as the map is being read from disk and rendered:
+///
+/// | Method                | Description                                                      |
+/// |:----------------------|:-----------------------------------------------------------------|
+/// | didBeginParsing       | Called when the tilemap is instantiated.                         |
+/// | didAddTileset         | Called when a tileset is added to a map.                         |
+/// | didAddLayer           | Called when a layer is added to a tilemap.                       |
+/// | didReadMap            | Called when the tilemap is finished parsing.                     |
+/// | didRenderMap          | Called when the tilemap layers are finished rendering.           |
+/// | didAddNavigationGraph | Called when the a navigation graph is built for a layer.         |
+/// | objectForTileType     | Specify a custom tile object for use in tile layers.             |
+/// | objectForVectorType   | Specify a custom object for use in object groups.                |
+/// | objectForGraphType    | Specify a custom graph node object for use in navigation graphs. |
+///
+/// ### Custom Objects ###
+///
+/// Custom object methods can be used to substitute your own objects for tiles:
+///
+/// ```swift
+/// func objectForTileType(named: String? = nil) -> SKTile.Type {
+///     if (named == "MyTile") {
+///        return MyTile.self
+///     }
+///    return SKTile.self
+/// }
+/// ```
 public protocol SKTilemapDelegate: AnyObject {
     var zDeltaForLayers: CGFloat { get }
     func didBeginParsing(_ tilemap: SKTilemap)
