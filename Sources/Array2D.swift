@@ -63,8 +63,8 @@ struct Array2D<T> {
         return items.isEmpty
     }
 
-    func contains<T : Equatable>(_ obj: T) -> Bool {
-        let filtered = self.items.filter {$0 as? T == obj}
+    func contains<Value: Equatable>(_ obj: Value) -> Bool {
+        let filtered = self.items.filter {$0 as? Value == obj}
         return filtered.isEmpty == false
     }
 }

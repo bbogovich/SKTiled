@@ -27,11 +27,9 @@
 import SpriteKit
 
 
-/**
- A structure representing a tile collision shape.
-
- - parameter points:  `[CGPoint]` frame duration.
- */
+/// A structure representing a tile collision shape.
+///
+/// - parameter points:  `[CGPoint]` frame duration.
 internal class TileCollisionShape: SKTiledObject {
 
     /// Object id.

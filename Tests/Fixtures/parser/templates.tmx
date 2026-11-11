@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<map version="1.10" tiledversion="1.10.2" orientation="orthogonal" renderorder="right-down" width="2" height="2" tilewidth="4" tileheight="4" infinite="0" nextlayerid="3" nextobjectid="4">
+ <tileset firstgid="1" source="sheet.tsx"/>
+ <layer id="1" name="ground" width="2" height="2">
+  <data encoding="csv">
+1,2,3,4
+</data>
+ </layer>
+ <objectgroup id="2" name="objects">
+  <object id="1" template="chest.tx" x="0" y="4"/>
+  <object id="2" template="chest.tx" name="open chest" x="4" y="4">
+   <properties>
+    <property name="locked" type="bool" value="false"/>
+   </properties>
+  </object>
+  <object id="3" template="crate.tx" x="0" y="8"/>
+ </objectgroup>
+</map>

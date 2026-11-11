@@ -1,13 +1,11 @@
 <p align="center">
 <img src="Docs/images/doc-banner-centered.svg" alt="SKTiled" title="SKTiled" width="881" height="81"/>
 <p align="center">
-<a href="https://swift.org"><img src="https://img.shields.io/badge/Swift-5.5-brightgreen.svg"></a>
-<a href="https://developer.apple.com/download/more/"><img src="https://img.shields.io/badge/Xcode-11.0-orange.svg"></a>
-<a href="https://travis-ci.org/mfessenden/SKTiled"><img src="https://travis-ci.org/mfessenden/SKTiled.svg?branch=master"></a>
-<a href="https://github.com/mfessenden/SKTiled/blob/master/LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg"></a>
-<a href="http://www.apple.com"><img src="https://img.shields.io/badge/platforms-iOS%20%7C%20tvOS%20%7C%20macOS-red.svg"></a>
-<a href="https://github.com/Carthage/Carthage/"><img src="https://img.shields.io/badge/Carthage-compatible-4BC51D.svg"></a>
-<a href="https://cocoapods.org/pods/SKTiled"><img src="https://img.shields.io/cocoapods/v/SKTiled.svg"></a>
+<a href="https://swift.org"><img src="https://img.shields.io/badge/Swift-6-brightgreen.svg"></a>
+<a href="https://developer.apple.com/xcode/"><img src="https://img.shields.io/badge/Xcode-26-orange.svg"></a>
+<a href="https://www.swift.org/documentation/package-manager/"><img src="https://img.shields.io/badge/SPM-compatible-4BC51D.svg"></a>
+<a href="LICENSE.md"><img src="https://img.shields.io/badge/License-MIT-blue.svg"></a>
+<a href="http://www.apple.com"><img src="https://img.shields.io/badge/platforms-iOS%2017%20%7C%20macOS%2014%20%7C%20tvOS%2017-red.svg"></a>
 </p>
 
 
@@ -16,13 +14,18 @@
 ![Demo Image](Docs/images/demo-iphone.png?raw=true)
 
 
-Check out the [**Official Documentation**][sktiled-12-doc-url].
+Check out the [**Documentation**](Docs/index.md).
+
+## About This Fork
+
+This is a fork of [**mfessenden/SKTiled**][upstream-url], updated for current versions of Swift, Xcode and Apple's platforms. **SKTiled 2.0** is distributed only as a Swift package, builds in the Swift 6 language mode and requires iOS 17, macOS 14 or tvOS 17. Loading has been rebuilt: maps load with throwing `SKTilemap.load(named:)` and `SKTilemap.load(url:)` methods that report a descriptive `TiledError` instead of crashing, and every file a map references is resolved relative to the file that references it, exactly as **Tiled** does, so Tiled project folders can be used as-is. The fork also fixes memory leaks, a tile cache bug when loading more than one map and data races on tile textures, removes the APIs deprecated in 1.x, and replaces the three demo projects with a single SwiftUI app. See the [**CHANGELOG**](CHANGELOG.md) for the full list of changes.
 
 ## Features
 
-- [x] iOS & macOS versions
-- [x] tvOS version
+- [x] iOS, macOS & tvOS support
+- [x] Swift Package Manager
 - [x] parses inline & external tilesets
+- [x] resolves file references relative to the referencing file, as Tiled does
 - [x] translates custom properties for maps, layers, objects & tiles
 - [x] renders all projections: (orthogonal, isometric, hexagonal & isometric staggered)
 - [x] renders all layer types: (tile, object, image, group)
@@ -45,46 +48,54 @@ Check out the [**Official Documentation**][sktiled-12-doc-url].
 
 ## Requirements
 
-- iOS 12
-- tvOS 12
-- macOS 11
-- Xcode 11/Swift 5
+- iOS 17
+- tvOS 17
+- macOS 14
+- Xcode 26 or later (swift-tools-version 6.2), Swift 6 language mode
 
 ## Installation
 
+**SKTiled** is installed with the Swift Package Manager. In Xcode, select **File > Add Package Dependencies…** and enter the repository URL:
+
+    https://github.com/bbogovich/SKTiled.git
+
+To use **SKTiled** from another Swift package, add it to your `Package.swift` file:
+
+```swift
+dependencies: [
+    .package(url: "https://github.com/bbogovich/SKTiled.git", branch: "master")
+]
+```
+
+and add `.product(name: "SKTiled", package: "SKTiled")` to your target's dependencies.
+
+Carthage, CocoaPods and prebuilt frameworks are no longer supported.
 
 
-### Carthage
+## Demo
 
-For Carthage installation, create a Cartfile in the root of your project:
-
-    github "mfessenden/SKTiled" ~> 1.2
-
-
-To use the new **[binary framework][binary-frameworks-url]** format, pass the **`--use-xcframeworks`** parameter to the build command:
-
-	carthage update --use-xcframeworks
-
-For more information, see the **[Carthage Installation][docs-carthage-url]** documentation.
-
-
-### CocoaPods
-
-
-For CocoaPods, install via a reference in your podfile:
-
-    pod 'SKTiled', '~> 1.2'
+**Demo/SKTiledDemo.xcodeproj** is a multiplatform SwiftUI app (macOS, iOS & tvOS) that displays maps in an `SKTiledScene`. The sidebar lists the maps bundled in **Demo/Maps**, and **Open Folder…** (**⌘O** on macOS) lists the maps in any folder on disk, so you can test your own Tiled projects directly. The toolbar toggles the grid, bounds, objects, pausing, zoom and fitting the map to the view, and an inspector shows map information and the tile coordinate under the pointer.
 
 
 ## Usage
 
-Loading a tilemap is very straightforward:
+The library is main-actor isolated, so load maps on the main actor. Loading a tilemap is very straightforward:
 
 ```swift
-if let tilemap = SKTilemap.load(tmxFile: "sample-map") {
+do {
+    // search the app bundle's resources for "sample-map.tmx"
+    let tilemap = try SKTilemap.load(named: "sample-map")
     scene.addChild(tilemap)
+} catch {
+    print(error.localizedDescription)
 }
+
+// load a map from a file URL
+let tilemap = try SKTilemap.load(url: mapURL, bundle: .main)
 ```
+
+Tilesets, images and templates are found relative to the file that references them, as in **Tiled**, so add your Tiled folder to Xcode as a folder reference. If loading fails, a `TiledError` describes the file and the problem.
+
 Once loaded, the rendered [`SKTilemap`][sktilemap-url] node reflects the various properties defined in the originating scene:
 
 - `SKTilemap.size`: size of the map in tiles.
@@ -272,6 +283,10 @@ let groundWalkable = groundLayer.getTilesWithProperty("walkable", true)
 let allWalkable = tilemap.getTilesWithProperty("walkable", true")
 ```
 
+## License
+
+**SKTiled** is released under the MIT license. See [LICENSE.md](LICENSE.md) for details.
+
 ## Acknowledgments
 
 - [Thorbjørn Lindeijer](https://github.com/bjorn): creator of *Tiled*
@@ -287,20 +302,14 @@ let allWalkable = tilemap.getTilesWithProperty("walkable", true")
 [swift-url]: https://swift.org/
 [license-image]:https://img.shields.io/badge/License-MIT-blue.svg
 [license-url]:https://github.com/mfessenden/SKTiled/blob/master/LICENSE
-[travis-image]:https://travis-ci.org/mfessenden/SKTiled.svg?branch=master
-[travis-url]:https://travis-ci.org/mfessenden/SKTiled
 [platforms-image]:https://img.shields.io/badge/platforms-iOS%20%7C%20tvOS%20%7C%20macOS-red.svg
 [platforms-url]:http://www.apple.com
-[carthage-image]:https://img.shields.io/badge/Carthage-compatible-4BC51D.svg
-[carthage-url]:https://github.com/Carthage/Carthage
-[pod-image]:https://img.shields.io/cocoapods/v/SKTiled.svg
 [mailto-url]:(mailto:michael.fessenden@gmail.com?subject=[SKTiled]%20Projects)
 
 [xcode11-image]:https://img.shields.io/badge/Xcode-11.0-orange.svg
 [xcode10-image]:https://img.shields.io/badge/Xcode-10.0-orange.svg
 [xcode-downloads-url]:https://developer.apple.com/download/more/
 
-[pod-url]:https://cocoapods.org/pods/SKTiled
 
 [branch-master-url]:https://github.com/mfessenden/SKTiled
 [branch-xcode8-url]:https://github.com/mfessenden/SKTiled/tree/xcode8
@@ -316,6 +325,8 @@ let allWalkable = tilemap.getTilesWithProperty("walkable", true")
 
 <!--- Documentation --->
 
+[upstream-url]:https://github.com/mfessenden/SKTiled
+
 [sktiled-gh-url]:https://mfessenden.github.io/SKTiled
 [sktiled-12-doc-url]:https://mfessenden.github.io/SKTiled/1.2/index.html
 [sktilemap-url]:https://mfessenden.github.io/SKTiled/1.2/Classes/SKTilemap.html
@@ -327,7 +338,6 @@ let allWalkable = tilemap.getTilesWithProperty("walkable", true")
 [sktilelayer-url]:https://mfessenden.github.io/SKTiled/1.2/Classes/SKTileLayer.html
 [sktileobject-url]:https://mfessenden.github.io/SKTiled/1.2/Classes/SKTileObject.html
 [sktileset-url]:https://mfessenden.github.io/SKTiled/1.2/Classes/SKTileset.html
-[docs-carthage-url]:https://mfessenden.github.io/SKTiled/1.3/getting-started.html#carthage-installation
 
 <!--- Tiled --->
 
@@ -344,4 +354,3 @@ let allWalkable = tilemap.getTilesWithProperty("walkable", true")
 [uitouch-url]:https://developer.apple.com/documentation/uikit/uitouch
 [nsevent-url]:https://developer.apple.com/documentation/appkit/nsevent
 [swift-package-doc-url]:https://developer.apple.com/documentation/swift_packages
-[binary-frameworks-url]:https://developer.apple.com/videos/play/wwdc2019/416/

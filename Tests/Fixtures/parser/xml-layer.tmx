@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<map version="1.10" tiledversion="1.10.2" orientation="orthogonal" renderorder="right-down" width="2" height="2" tilewidth="4" tileheight="4" infinite="0" nextlayerid="3" nextobjectid="2">
+ <properties>
+  <property name="notes">first line
+second line</property>
+  <property name="single" value="one"/>
+ </properties>
+ <tileset firstgid="1" source="sheet.tsx"/>
+ <layer id="1" name="ground" width="2" height="2">
+  <properties>
+   <property name="layerNote" value="ground"/>
+  </properties>
+  <data>
+   <tile gid="1"/>
+   <tile/>
+   <tile/>
+   <tile gid="5"/>
+  </data>
+ </layer>
+ <objectgroup id="2" name="objects">
+  <properties>
+   <property name="groupNote" value="group"/>
+  </properties>
+  <object id="1" name="marker" x="0" y="0" width="4" height="4">
+   <properties>
+    <property name="objectNote" value="object"/>
+   </properties>
+  </object>
+ </objectgroup>
+</map>

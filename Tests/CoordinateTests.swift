@@ -35,33 +35,19 @@ let keyCoordinate: Coordinate = (20,3)
 let keyLayerName = "Objects"
 
 
+@MainActor
 class CoordinateTests: XCTestCase {
     
-    var testBundle: Bundle!
     var tilemap: SKTilemap?
     let tilemapName = "test-tilemap"
     
-    override func setUp() {
-        super.setUp()
-        
-        if (testBundle == nil) {
-            TiledGlobals.default.loggingLevel = .none
-            #if SWIFT_PACKAGE
-            testBundle = Bundle.module
-            #else
-            testBundle = Bundle(for: type(of: self))
-            #endif
-        }
-        
-        if (tilemap == nil) {
-            let mapurl = testBundle.url(forResource: tilemapName, withExtension: "tmx")!
-            tilemap = SKTilemap.load(tmxFile: mapurl.path, loggingLevel: .none)
-        }
+    override func setUp() async throws {
+        try await super.setUp()
+        TiledGlobals.default.loggingLevel = .none
+        let mapurl = try XCTUnwrap(Bundle.module.url(forResource: tilemapName, withExtension: "tmx"))
+        tilemap = try SKTilemap.load(url: mapurl, loggingLevel: .none)
     }
     
-    override func tearDown() {
-        super.tearDown()
-    }
     
     /**
      Test that coordinate conversion is working as expected.

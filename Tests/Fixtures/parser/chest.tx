@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<template>
+ <tileset firstgid="1" source="sheet.tsx"/>
+ <object name="chest" type="chest" gid="2147483652" width="4" height="4">
+  <properties>
+   <property name="loot" value="gold"/>
+   <property name="locked" type="bool" value="true"/>
+  </properties>
+ </object>
+</template>

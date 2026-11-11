@@ -34,6 +34,7 @@ let testHexValues = ["#2FD62A", "#FFA5A5", "#A5CCFF", "#AF722A", "#5FBFD4"]
 
 
 /// This module tests the color functions included in the framework.
+@MainActor
 class ColorTests: XCTestCase {
     
     /// Test to ensure that hex colors are parsed correctly.
@@ -144,13 +145,18 @@ class ColorTests: XCTestCase {
     }
 
     
-    /// Test to determine if hex alpha values are translated correctly
+    /// Test to determine if hex alpha values are translated correctly.
+    ///
+    ///   Tiled writes 8-digit colors as `#AARRGGBB`, so `#80e3b447` is `#e3b447` at 50% alpha.
     func testColorHexAlphaEquality() {
-        let expectedAlphaValue: CGFloat = 0.28
+        let expectedAlphaValue: CGFloat = 0.50
         let hexColor = SKColor(hexString: "#80e3b447")
         let alphaValue = hexColor.components.a
         // round resulting float values
         XCTAssert(alphaValue.precised(2) == expectedAlphaValue.precised(2),  "❗️ unexpected alpha value: \(alphaValue) (expected \(expectedAlphaValue))")
+
+        let comps = hexColor.integerComponents
+        XCTAssertEqual([comps.r, comps.g, comps.b, comps.a], [0xe3, 0xb4, 0x47, 0x80])
     }
     
     /// Test to ensure that hex color strings with 3/4 digits are translated correctly.

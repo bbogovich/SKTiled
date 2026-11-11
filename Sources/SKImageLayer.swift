@@ -34,40 +34,37 @@ import Cocoa
 #endif
 
 
-/**
- 
- ## Overview
- 
- The `SKImageLayer` object is really nothing more than a sprite with positioning attributes.
- 
- ### Properties
- 
- | Property | Description        |
- |:---------|:-------------------|
- | image    | Layer image name.  |
- | wrapX    | Wrap horizontally. |
- | wrapY    | Wrap vertically.   |
- 
- 
- ### Methods ###
- 
- | Method          | Description              |
- |:----------------|:-------------------------|
- | setLayerImage   | Set the layer's image.   |
- | setLayerTexture | Set the layer's texture. |
- | wrapY           | Wrap vertically.         |
- 
- ### Usage
- 
- Set the layer image with:
- 
- ```swift
- imageLayer.setLayerImage("clouds-background")
- ```
- */
+/// ## Overview
+///
+/// The `SKImageLayer` object is really nothing more than a sprite with positioning attributes.
+///
+/// ### Properties
+///
+/// | Property | Description        |
+/// |:---------|:-------------------|
+/// | image    | Layer image name.  |
+/// | wrapX    | Wrap horizontally. |
+/// | wrapY    | Wrap vertically.   |
+///
+///
+/// ### Methods ###
+///
+/// | Method          | Description              |
+/// |:----------------|:-------------------------|
+/// | setLayerImage   | Set the layer's image.   |
+/// | setLayerTexture | Set the layer's texture. |
+/// | wrapY           | Wrap vertically.         |
+///
+/// ### Usage
+///
+/// Set the layer image with:
+///
+/// ```swift
+/// try imageLayer.setLayerImage(url: cloudsURL)
+/// ```
 public class SKImageLayer: SKTiledLayerObject {
     
-    public var image: String!                       // image name for layer
+    public var image: String?                       // image path or name for layer
     private var textures: [SKTexture] = []          // texture values
     private var sprite: SKSpriteNode?               // sprite
     
@@ -76,93 +73,75 @@ public class SKImageLayer: SKTiledLayerObject {
     
     // MARK: - Init
     
-    /**
-     Initialize with a layer name, and parent `SKTilemap` node.
-     
-     - parameter layerName: `String` image layer name.
-     - parameter tilemap:   `SKTilemap` parent map.
-     */
+    /// Initialize with a layer name, and parent `SKTilemap` node.
+    ///
+    /// - parameter layerName: `String` image layer name.
+    /// - parameter tilemap:   `SKTilemap` parent map.
     override public init(layerName: String, tilemap: SKTilemap) {
         super.init(layerName: layerName, tilemap: tilemap)
         self.layerType = .image
     }
     
-    /**
-     Initialize with parent `SKTilemap` and layer attributes.
-     
-     **Do not use this intializer directly**
-     
-     - parameter tilemap:      `SKTilemap` parent map.
-     - parameter attributes:   `[String: String]` layer attributes.
-     */
+    /// Initialize with parent `SKTilemap` and layer attributes.
+    ///
+    /// **Do not use this intializer directly**
+    ///
+    /// - parameter tilemap:      `SKTilemap` parent map.
+    /// - parameter attributes:   `[String: String]` layer attributes.
     public init?(tilemap: SKTilemap, attributes: [String: String]) {
         guard let layerName = attributes["name"] else { return nil }
         super.init(layerName: layerName, tilemap: tilemap, attributes: attributes)
         self.layerType = .image
     }
     
-    /**
-     Set the layer image as a sprite.
-     
-     - parameter named: `String` image name.
-     */
-    public func setLayerImage(_ named: String) {
-        self.image = named
-        
-        let texture = addTexture(imageNamed: named)
+    /// Sets the layer image from an image file.
+    ///
+    /// - Parameter url: image file (any format ImageIO can decode).
+    /// - Throws: `TiledError` if the image cannot be read.
+    public func setLayerImage(url: URL) throws {
+        let image = try TiledImageLoader.cgImage(contentsOf: url)
+        setLayerImage(image, source: url.path)
+    }
+
+    /// Sets the layer image from a decoded image.
+    ///
+    /// - Parameters:
+    ///   - image: layer image.
+    ///   - source: image path or name, recorded as the layer's `image`.
+    public func setLayerImage(_ image: CGImage, source: String) {
+        self.image = source
+
+        let texture = TiledImageLoader.texture(from: image)
+        textures.append(texture)
         let textureSize = texture.size()
-        
-        self.sprite = SKSpriteNode(texture: texture)
-        addChild(self.sprite!)
-        
-        self.sprite!.position.x += textureSize.width / 2
-        self.sprite!.position.y -= textureSize.height / 2.0
+
+        let sprite = SKSpriteNode(texture: texture)
+        sprite.position.x += textureSize.width / 2
+        sprite.position.y -= textureSize.height / 2
+        self.sprite?.removeFromParent()
+        self.sprite = sprite
+        addChild(sprite)
     }
-    
-    /**
-     Update the layer texture.
-     
-     - parameter texture: `SKTexture` layer image texture.
-     */
+
+    /// Replaces the layer sprite with a texture.
+    ///
+    /// - Parameter texture: layer image texture.
     public func setLayerTexture(texture: SKTexture) {
-        self.sprite = SKSpriteNode(texture: texture)
-        addChild(self.sprite!)
+        self.sprite?.removeFromParent()
+        let sprite = SKSpriteNode(texture: texture)
+        self.sprite = sprite
+        addChild(sprite)
     }
-    
-    /**
-     Set the layer texture with an image name.
-     
-     - parameter imageNamed: `String` image name.
-     - returns: `SKTexture` texture added.
-     */
-    private func addTexture(imageNamed named: String) -> SKTexture {
-        let inputURL = URL(fileURLWithPath: named)
-        // read image from file
-        guard let imageDataProvider = CGDataProvider(url: inputURL as CFURL) else {
-            self.log("Image read error: \"\(named)\"", level: .fatal)
-            fatalError("Error reading image: \"\(named)\"")
-        }
-        // creare a data provider
-        let image = CGImage(pngDataProviderSource: imageDataProvider, decode: nil, shouldInterpolate: false, intent: .defaultIntent)!
-        
-        // create the texture
-        let sourceTexture = SKTexture(cgImage: image)
-        sourceTexture.filteringMode = .nearest
-        textures.append(sourceTexture)
-        return sourceTexture
-    }
-    
+
     required public init?(coder aDecoder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
     }
     
     // MARK: - Updating: Image Layer
     
-    /**
-     Update the image layer before each frame is rendered.
-     
-     - parameter currentTime: `TimeInterval` update interval.
-     */
+    /// Update the image layer before each frame is rendered.
+    ///
+    /// - parameter currentTime: `TimeInterval` update interval.
     override public func update(_ currentTime: TimeInterval) {
         super.update(currentTime)
     }

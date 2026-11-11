@@ -120,7 +120,8 @@ internal class TileObjectProxy: SKShapeNode, SKTiledGeometry {
                 case .ellipse:
                     objectPath = bezierPath(scaledVertices, closed: true, alpha: object.shapeType.curvature).path
                 default:
-                    objectPath = polygonPath(scaledVertices, closed: true)
+                    // polylines are open paths
+                    objectPath = polygonPath(scaledVertices, closed: object.shapeType != .polyline)
             }
 
             self.path = objectPath
@@ -128,7 +129,8 @@ internal class TileObjectProxy: SKShapeNode, SKTiledGeometry {
 
 
             let currentStrokeColor = (proxyIsVisible == true) ? self.objectColor : SKColor.clear
-            let currentFillColor = (proxyIsVisible == true) ? (isRenderable == false) ? currentStrokeColor.withAlphaComponent(fillOpacity) : SKColor.clear : SKColor.clear
+            let isFilled = (isRenderable == false) && (object.shapeType != .polyline)
+            let currentFillColor = (proxyIsVisible == true) && (isFilled == true) ? currentStrokeColor.withAlphaComponent(fillOpacity) : SKColor.clear
 
             self.strokeColor = currentStrokeColor
             self.fillColor = currentFillColor
@@ -143,14 +145,34 @@ internal class TileObjectProxy: SKShapeNode, SKTiledGeometry {
 
 extension TileObjectProxy {
 
-    override var description: String {
-        guard let object = reference else {
-            return "Object Proxy: nil"
+    nonisolated override var description: String {
+        MainActor.assumeIsolated {
+            guard let object = reference else {
+                return "Object Proxy: nil"
+            }
+            return "Object Proxy: \(object.id)"
         }
-        return "Object Proxy: \(object.id)"
     }
 
-    override var debugDescription: String {
-        return description
+    nonisolated override var debugDescription: String {
+        MainActor.assumeIsolated {
+            return description
+        }
+    }
+}
+
+
+extension TileObjectProxy {
+
+    /// Shows or hides object proxies and redraws them.
+    ///
+    /// - Parameters:
+    ///   - visible: show the proxies.
+    ///   - proxies: proxies to update.
+    static func setShowObjects(_ visible: Bool, for proxies: [TileObjectProxy]) {
+        for proxy in proxies {
+            proxy.showObjects = visible
+            proxy.draw()
+        }
     }
 }

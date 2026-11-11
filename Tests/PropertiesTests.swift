@@ -29,32 +29,18 @@ import XCTest
 @testable import SKTiled
 
 
+@MainActor
 class PropertiesTests: XCTestCase {
     
-    var testBundle: Bundle!
     var tilemap: SKTilemap?
     
-    override func setUp() {
-        super.setUp()
-        
-        if (testBundle == nil) {
-            TiledGlobals.default.loggingLevel = .none
-            #if SWIFT_PACKAGE
-            testBundle = Bundle.module
-            #else
-            testBundle = Bundle(for: type(of: self))
-            #endif
-        }
-        
-        if (tilemap == nil) {
-            let mapurl = testBundle!.url(forResource: "test-tilemap", withExtension: "tmx")!
-            tilemap = SKTilemap.load(tmxFile: mapurl.path, loggingLevel: .none)
-        }
+    override func setUp() async throws {
+        try await super.setUp()
+        TiledGlobals.default.loggingLevel = .none
+        let mapurl = try XCTUnwrap(Bundle.module.url(forResource: "test-tilemap", withExtension: "tmx"))
+        tilemap = try SKTilemap.load(url: mapurl, loggingLevel: .none)
     }
     
-    override func tearDown() {
-        super.tearDown()
-    }
     
     /**
      Test the `SKTiledObject.stringArrayForKey` function.
@@ -109,9 +95,9 @@ class PropertiesTests: XCTestCase {
      set to false. If the tilemap ignores the properties parsing phase,
      the `SKTilemap.allowZoom` should remain true.
      */
-    func testPropertiesAreIgnored() {
-        let mapurl = testBundle!.url(forResource: "test-tilemap", withExtension: "tmx")!
-        let ignoredMap = SKTilemap.load(tmxFile: mapurl.path, ignoreProperties: true)!
+    func testPropertiesAreIgnored() throws {
+        let mapurl = try XCTUnwrap(Bundle.module.url(forResource: "test-tilemap", withExtension: "tmx"))
+        let ignoredMap = try SKTilemap.load(url: mapurl, ignoreProperties: true)
         XCTAssertFalse(ignoredMap.allowZoom == false, "❗️tilemap `allowZoom` property should still be the default `true` value")
     }
     

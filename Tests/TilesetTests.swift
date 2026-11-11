@@ -30,36 +30,22 @@ import XCTest
 
 
 /// Test tileset objects.
+@MainActor
 class TilesetTests: XCTestCase {
 
-    var testBundle: Bundle!
     var tilemap: SKTilemap?
     var tileset: SKTileset?
 
     let tilesetName = "environment-8x8"
 
-    override func setUp() {
-        super.setUp()
-
-        if (testBundle == nil) {
-            TiledGlobals.default.loggingLevel = .none
-            #if SWIFT_PACKAGE
-            testBundle = Bundle.module
-            #else
-            testBundle = Bundle(for: type(of: self))
-            #endif
-        }
-
-        if (tilemap == nil) {
-            let mapurl = testBundle!.url(forResource: "test-tilemap", withExtension: "tmx")!
-            tilemap = SKTilemap.load(tmxFile: mapurl.path, loggingLevel: .none)
-            tileset = tilemap?.getTileset(named: tilesetName)
-        }
+    override func setUp() async throws {
+        try await super.setUp()
+        TiledGlobals.default.loggingLevel = .none
+        let mapurl = try XCTUnwrap(Bundle.module.url(forResource: "test-tilemap", withExtension: "tmx"))
+        tilemap = try SKTilemap.load(url: mapurl, loggingLevel: .none)
+        tileset = tilemap?.getTileset(named: tilesetName)
     }
 
-    override func tearDown() {
-        super.tearDown()
-    }
 
     /**
      Test to see if a named tileset can be properly queried.
@@ -113,18 +99,13 @@ class TilesetTests: XCTestCase {
         let expectedLocalID = 5
         let expectedKeyCount = 3
         let keyTiles = tilemap.getTiles(globalID: keyid)
-        XCTAssert(keyTiles.count == 3, "❗️tile count for gid \(keyid) should be \(expectedKeyCount): \(keyTiles.count)")
+        XCTAssert(keyTiles.count == expectedKeyCount, "❗️tile count for gid \(keyid) should be \(expectedKeyCount): \(keyTiles.count)")
 
-        var keyPropertyIsCorrect = true
-        var keyIDsAreCorrect = true
         for tile in keyTiles {
-            let tileColorHex = tile.tileData.stringForKey("color")
-            keyPropertyIsCorrect = (tileColorHex != nil) && (tileColorHex == "#ffa07daa")
-            keyIDsAreCorrect = (tile.tileData.id == expectedLocalID) && (tile.tileData.globalID == keyid)
+            XCTAssertEqual(tile.tileData.stringForKey("color"), "#ffa07daa", "❗️tiles with gid \(keyid) should have a `color` property")
+            XCTAssertEqual(tile.tileData.id, expectedLocalID, "❗️tiles with gid \(keyid) should have a local id of \(expectedLocalID)")
+            XCTAssertEqual(tile.tileData.globalID, keyid, "❗️tiles with gid \(keyid) should have a global id of \(keyid)")
         }
-
-        XCTAssert(keyPropertyIsCorrect == true, "❗️tiles with gid \(keyid) should have a `color` property")
-        XCTAssert(keyIDsAreCorrect == true, "❗️tiles with gid \(keyid) should have a local id of \(expectedLocalID)")
     }
     
     /**
